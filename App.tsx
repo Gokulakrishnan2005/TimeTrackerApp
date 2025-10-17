@@ -18,6 +18,9 @@ import { LoginScreen } from './screens/LoginScreen';
 import { SignupScreen } from './screens/SignupScreen';
 import ConnectionTest from './components/ConnectionTest';
 import { CircularTabBar } from './components/CircularTabBar';
+import ChangePasswordScreen from './screens/ChangePasswordScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import SpendingHistoryScreen from './screens/SpendingHistoryScreen';
 
 // Navigation types
 export type RootStackParamList = {
@@ -41,6 +44,18 @@ export type MainTabParamList = {
 const AuthStack = createStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 const RootStack = createStackNavigator<RootStackParamList>();
+const ProfileStack = createStackNavigator();
+
+const ProfileNavigator = () => {
+  return (
+    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStack.Screen name="ProfileMain" component={ProfileScreen} />
+      <ProfileStack.Screen name="ProfileChangePassword" component={ChangePasswordScreen} />
+      <ProfileStack.Screen name="ProfileNotifications" component={NotificationsScreen} />
+      <ProfileStack.Screen name="ProfileSpendingHistory" component={SpendingHistoryScreen} />
+    </ProfileStack.Navigator>
+  );
+};
 
 // Authentication navigator
 const AuthNavigator = () => {
@@ -70,7 +85,7 @@ const MainNavigator = () => {
       <MainTab.Screen name="Finance" component={FinanceScreen} />
       <MainTab.Screen name="Add" component={AddQuickAction} />
       <MainTab.Screen name="Tasks" component={TasksScreen} />
-      <MainTab.Screen name="Profile" component={ProfileScreen} />
+      <MainTab.Screen name="Profile" component={ProfileNavigator} />
     </MainTab.Navigator>
   );
 };

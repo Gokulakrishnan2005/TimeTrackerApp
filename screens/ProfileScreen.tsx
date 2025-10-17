@@ -8,6 +8,7 @@ import {
   Image,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
@@ -16,12 +17,18 @@ import { useAuth } from "../contexts/AuthContext";
 import { useNavigation } from "@react-navigation/native";
 
 export const ProfileScreen: FC = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, updateProfile } = useAuth();
   const navigation = useNavigation<any>();
   const [showConnectionTest, setShowConnectionTest] = React.useState(false);
+  const [isEditing, setIsEditing] = React.useState(false);
+  const [isSaving, setIsSaving] = React.useState(false);
 
-  const name = user?.name ?? "Guest";
-  const email = user?.email ?? "";
+  const rawName = user?.name ?? "";
+  const displayName = rawName.trim() ? rawName : "Guest";
+  const displayEmail = user?.email ?? "";
+  const [formName, setFormName] = React.useState(rawName);
+  const [formEmail, setFormEmail] = React.useState(displayEmail);
+
   const joinedLabel = useMemo(() => {
     if (!user?.createdAt) {
       return "Member";
@@ -36,6 +43,16 @@ export const ProfileScreen: FC = () => {
     }
   }, [user?.createdAt]);
 
+  React.useEffect(() => {
+    if (!isEditing) {
+      setFormName(rawName);
+      setFormEmail(displayEmail);
+    }
+  }, [rawName, displayEmail, isEditing]);
+
+  const isDirty = formName.trim() !== rawName.trim() || formEmail.trim() !== displayEmail.trim();
+  const canSave = isDirty && !isSaving;
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -44,8 +61,55 @@ export const ProfileScreen: FC = () => {
     }
   };
 
+  const handleEditProfile = () => {
+    setIsEditing(true);
+    setFormName(rawName);
+    setFormEmail(displayEmail);
+  };
+
+  const handleCancelEdit = () => {
+    setFormName(rawName);
+    setFormEmail(displayEmail);
+    setIsEditing(false);
+  };
+
+  const handleSaveProfile = async () => {
+    const nextName = formName.trim();
+    const nextEmail = formEmail.trim();
+
+    if (!nextName.length) {
+      Alert.alert("Invalid Name", "Please enter your name.");
+      return;
+    }
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(nextEmail)) {
+      Alert.alert("Invalid Email", "Please enter a valid email address.");
+      return;
+    }
+
+    try {
+      setIsSaving(true);
+      await updateProfile({ name: nextName, email: nextEmail });
+      Alert.alert("Profile Updated", "Your profile details have been saved.");
+      setIsEditing(false);
+    } catch (error: any) {
+      Alert.alert("Update Failed", error?.message ?? "Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleChangePassword = () => {
+    navigation.navigate("ProfileChangePassword");
+  };
+
+  const handleOpenNotifications = () => {
+    navigation.navigate("ProfileNotifications");
+  };
+
   const goToIncomeExpenseHistory = () => {
-    navigation.navigate("FinanceHistory");
+    navigation.navigate("ProfileSpendingHistory");
   };
 
   return (
@@ -56,12 +120,12 @@ export const ProfileScreen: FC = () => {
             <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarInitial}>{name.charAt(0).toUpperCase()}</Text>
+              <Text style={styles.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
             </View>
           )}
         </View>
-        <Text style={styles.headerName}>{name}</Text>
-        <Text style={styles.headerEmail}>{email || "Add your email"}</Text>
+        <Text style={styles.headerName}>{displayName}</Text>
+        <Text style={styles.headerEmail}>{displayEmail || "Add your email"}</Text>
         <View style={styles.headerRow}>
           <View style={styles.headerChip}>
             <Text style={styles.headerChipLabel}>Member since</Text>
@@ -80,35 +144,67 @@ export const ProfileScreen: FC = () => {
           <Text style={styles.fieldLabel}>Name</Text>
           <TextInput
             style={styles.fieldInput}
-            value={name}
-            editable={false}
+            value={formName}
+            editable={isEditing && !isSaving}
             placeholder="Your name"
             placeholderTextColor={colors.textSecondary}
+            onChangeText={setFormName}
+            autoCapitalize="words"
+            returnKeyType="next"
           />
         </View>
         <View style={styles.fieldGroup}>
           <Text style={styles.fieldLabel}>Email</Text>
           <TextInput
             style={styles.fieldInput}
-            value={email}
-            editable={false}
+            value={formEmail}
+            editable={isEditing && !isSaving}
             placeholder="Your email"
             placeholderTextColor={colors.textSecondary}
+            onChangeText={setFormEmail}
+            autoCapitalize="none"
+            keyboardType="email-address"
+            autoCorrect={false}
           />
         </View>
         <View style={styles.actionRow}>
-          <TouchableOpacity style={styles.primaryButton}>
-            <Text style={styles.primaryButtonText}>Edit Profile</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryButton}>
-            <Text style={styles.secondaryButtonText}>Change Password</Text>
-          </TouchableOpacity>
+          {isEditing ? (
+            <>
+              <TouchableOpacity
+                style={[styles.primaryButton, !canSave && styles.primaryButtonDisabled]}
+                onPress={handleSaveProfile}
+                disabled={!canSave}
+              >
+                {isSaving ? (
+                  <ActivityIndicator color={colors.surface} />
+                ) : (
+                  <Text style={styles.primaryButtonText}>Save Changes</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.secondaryButton}
+                onPress={handleCancelEdit}
+                disabled={isSaving}
+              >
+                <Text style={styles.secondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <TouchableOpacity style={styles.primaryButton} onPress={handleEditProfile}>
+                <Text style={styles.primaryButtonText}>Edit Profile</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryButton} onPress={handleChangePassword}>
+                <Text style={styles.secondaryButtonText}>Change Password</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>App Settings</Text>
-        <TouchableOpacity style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={handleOpenNotifications}>
           <Text style={styles.menuText}>Notifications</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
@@ -135,7 +231,7 @@ export const ProfileScreen: FC = () => {
         </View>
         <View style={styles.menuItem}>
           <Text style={styles.menuText}>App Version</Text>
-          <Text style={styles.menuValue}>1.0.0</Text>
+          <Text style={styles.menuValue}>0.1.2(alpha)</Text>
         </View>
       </View>
 
@@ -266,8 +362,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     backgroundColor: colors.background,
-    color: colors.textPrimary,
     ...typography.body,
+    color: colors.textPrimary,
   },
   actionRow: {
     flexDirection: "row",
@@ -279,6 +375,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radii.lg,
     alignItems: "center",
+  },
+  primaryButtonDisabled: {
+    backgroundColor: colors.primary,
+    opacity: 0.6,
   },
   primaryButtonText: {
     ...typography.body,

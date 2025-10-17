@@ -64,6 +64,7 @@ const FinanceScreen: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [timePeriod, setTimePeriod] = useState<TimePeriod>('month');
   const [defaultModalType, setDefaultModalType] = useState<'income' | 'expense' | undefined>(undefined);
+  const [showTopIncome, setShowTopIncome] = useState(true);
   const [showTopExpenses, setShowTopExpenses] = useState(true);
   const [incomeChange, setIncomeChange] = useState<string>('+0%');
   const [expenseChange, setExpenseChange] = useState<string>('+0%');
@@ -73,14 +74,15 @@ const FinanceScreen: React.FC = () => {
   const isFocused = useIsFocused();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const isTiny = width < 330;
   const isSmall = width < 380;
   const isMedium = width >= 380 && width < 768;
-  const horizontalPadding = isSmall ? spacing.sm : isMedium ? spacing.md : spacing.lg;
-  const chartWidth = Math.min(width - (horizontalPadding as number) * 2, 400);
-  const chartHeight = Math.min(180, height * 0.25);
-  const summaryCardWidth = isSmall ? '100%' : isMedium ? '48%' : 1;
-  const fontSizeMultiplier = isSmall ? 0.9 : 1;
-  const chartLegendFontSize = 10 * fontSizeMultiplier;
+  const horizontalPadding = isTiny ? spacing.sm : isSmall ? spacing.md : isMedium ? spacing.lg : spacing.xl;
+  const sectionPadding = (isSmall || isTiny) ? spacing.md : spacing.lg;
+  const chartAvailableWidth = Math.max(220, width - horizontalPadding * 2 - sectionPadding * 2);
+  const chartWidth = Math.min(420, chartAvailableWidth);
+  const chartHeight = Math.max(160, Math.min(220, height * 0.3));
+  const MAX_VISIBLE_SEGMENTS = 5;
 
   useEffect(() => {
     // Hydrate saved UI state and cached data first for instant display
@@ -310,35 +312,65 @@ const FinanceScreen: React.FC = () => {
   const incomeColors = ['#5B9AA8', '#7FB7A7', '#A3C9A5', '#77C3B1', '#4ECDC4'];
   const expenseColors = ['#C87272', '#D8847B', '#E89684', '#BC5E5E', '#A85050'];
 
-  const incomeChartData: ChartSlice[] = incomeBreakdown.map((item, i) => ({
-    name: `${item.category || 'Others'} (${item.percentage}%)`,
-    population: item.amount,
-    color: incomeColors[i % incomeColors.length],
-    legendFontColor: colors.textSecondary,
-    legendFontSize: 12,
-  }));
-
-  const expData = (showTopExpenses ? expenseBreakdown.slice(0, 5) : expenseBreakdown);
-  const formatLegendText = (text: string) => {
-    if (!text) return '';
-    // Truncate long category names
-    const maxLength = isSmall ? 10 : 15;
-    if (text.length > maxLength) {
-      return text.substring(0, maxLength) + '..';
-    }
-    return text;
+  const parsePercentageValue = (value: string) => {
+    const numeric = parseFloat(value.replace(/[^0-9.-]+/g, ''));
+    return Number.isNaN(numeric) ? 0 : numeric;
   };
 
-  const expenseChartData: ChartSlice[] = expData.map((item, i) => {
-    const displayName = formatLegendText(item.category || 'Others');
-    return {
-      name: `${displayName} ${item.percentage}%`,
-      population: item.amount,
-      color: expenseColors[i % expenseColors.length],
-      legendFontColor: colors.textSecondary,
-      legendFontSize: chartLegendFontSize,
-    };
-  });
+  const buildPieSlices = (
+    categories: CategoryBreakdown[],
+    palette: string[],
+    showTop: boolean
+  ) => {
+    const sorted = [...categories].sort((a, b) => b.amount - a.amount);
+    const hasOverflow = sorted.length > MAX_VISIBLE_SEGMENTS;
+    const topItems = sorted.slice(0, MAX_VISIBLE_SEGMENTS);
+    const remainderItems = sorted.slice(MAX_VISIBLE_SEGMENTS);
+
+    const mapWithPalette = (items: CategoryBreakdown[], offset = 0) =>
+      items.map((item, idx) => ({
+        name: `${item.category || 'Others'} (${item.percentage})`,
+        population: item.amount,
+        color: palette[(offset + idx) % palette.length],
+        legendFontColor: colors.textSecondary,
+        legendFontSize: 12,
+      }));
+
+    if (sorted.length === 0) {
+      return { slices: [] as ChartSlice[], hasOverflow, remainderItems };
+    }
+
+    if (showTop) {
+      const slices = mapWithPalette(topItems);
+      if (hasOverflow) {
+        const othersAmount = remainderItems.reduce((sum, item) => sum + item.amount, 0);
+        const othersPercentage = remainderItems.reduce(
+          (sum, item) => sum + parsePercentageValue(item.percentage),
+          0
+        );
+        slices.push({
+          name: `Others (${othersPercentage.toFixed(2)}%)`,
+          population: othersAmount,
+          color: palette[slices.length % palette.length],
+          legendFontColor: colors.textSecondary,
+          legendFontSize: 12,
+        });
+      }
+      return { slices, hasOverflow, remainderItems };
+    }
+
+    if (!hasOverflow) {
+      return { slices: mapWithPalette(sorted), hasOverflow, remainderItems };
+    }
+
+    return { slices: mapWithPalette(remainderItems), hasOverflow, remainderItems };
+  };
+
+  const incomePie = buildPieSlices(incomeBreakdown, incomeColors, showTopIncome);
+  const expensePie = buildPieSlices(expenseBreakdown, expenseColors, showTopExpenses);
+
+  const incomeChartData = incomePie.slices;
+  const expenseChartData = expensePie.slices;
 
   const last6 = trends.slice(-6);
   const labels = last6.map(t => ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][t.month - 1] || '');
@@ -352,29 +384,14 @@ const FinanceScreen: React.FC = () => {
   };
 
   const chartConfig = {
-    backgroundColor: 'transparent',
-    backgroundGradientFrom: 'transparent',
-    backgroundGradientTo: 'transparent',
+    backgroundColor: '#ffffff',
+    backgroundGradientFrom: '#ffffff',
+    backgroundGradientTo: '#ffffff',
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-    style: {
-      borderRadius: 16,
-    },
-    propsForDots: { 
-      r: isSmall ? '3' : '4', 
-      strokeWidth: '2' 
-    },
-    propsForBackgroundLines: { 
-      stroke: '#E5E7EB', 
-      strokeWidth: 1,
-      strokeDasharray: '' 
-    },
-    propsForLabels: {
-      fontSize: 10 * fontSizeMultiplier,
-    },
-    barPercentage: 0.8,
-    useShadowColorFromDataset: false,
+    propsForDots: { r: '4', strokeWidth: '2' },
+    propsForBackgroundLines: { strokeDasharray: '', stroke: '#E5E7EB', strokeWidth: 1 },
   } as const;
 
   return (
@@ -387,34 +404,33 @@ const FinanceScreen: React.FC = () => {
         }
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.content, { 
-          padding: horizontalPadding, 
+        <View style={[styles.content, {
+          padding: horizontalPadding,
           paddingBottom: horizontalPadding + insets.bottom + 16,
           maxWidth: 800, // Max width for larger screens
           width: '100%',
           alignSelf: 'center'
-        }]}>
-        <Text style={styles.title}>Finance Overview</Text>
+        }]}> 
+        <Text style={[styles.title, (isSmall || isTiny) && styles.titleSmall]}>Finance Overview</Text>
 
         {/* Summary Cards */}
         <View style={[
           styles.summaryContainer, 
-          isSmall ? styles.summaryContainerStack : { flexWrap: 'wrap', justifyContent: 'space-between' }
+          isSmall ? styles.summaryContainerStack : styles.summaryContainerWide
         ]}>
           <View style={[
             styles.summaryCard, 
             styles.incomeCard,
-            { 
-              width: isSmall ? '100%' : '48%', 
-              marginBottom: isSmall ? 12 : 16,
-              flex: undefined // Remove flex to fix type error
-            }
+            { width: isSmall ? '100%' : '48%', marginBottom: isSmall ? 12 : 16 }
           ]}>
             <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Income</Text>
-            <Text 
-              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
-              adjustsFontSizeToFit 
-              minimumFontScale={0.8} 
+            <Text
+              style={[
+                styles.summaryAmount,
+                isTiny ? styles.summaryAmountTiny : isSmall ? styles.summaryAmountSmall : styles.summaryAmountLarge,
+              ]}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               numberOfLines={1}
             >
               {summary ? formatCurrency(summary.income) : '₹0'}
@@ -427,17 +443,16 @@ const FinanceScreen: React.FC = () => {
           <View style={[
             styles.summaryCard, 
             styles.expenseCard,
-            { 
-              width: isSmall ? '100%' : '48%', 
-              marginBottom: isSmall ? 12 : 16,
-              flex: undefined // Remove flex to fix type error
-            }
+            { width: isSmall ? '100%' : '48%', marginBottom: isSmall ? 12 : 16 }
           ]}>
             <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Expenses</Text>
-            <Text 
-              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
-              adjustsFontSizeToFit 
-              minimumFontScale={0.8} 
+            <Text
+              style={[
+                styles.summaryAmount,
+                isTiny ? styles.summaryAmountTiny : isSmall ? styles.summaryAmountSmall : styles.summaryAmountLarge,
+              ]}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               numberOfLines={1}
             >
               {summary ? formatCurrency(summary.expenses) : '₹0'}
@@ -453,10 +468,13 @@ const FinanceScreen: React.FC = () => {
             { width: '100%' }
           ]}>
             <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Savings</Text>
-            <Text 
-              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
-              adjustsFontSizeToFit 
-              minimumFontScale={0.8} 
+            <Text
+              style={[
+                styles.summaryAmount,
+                isTiny ? styles.summaryAmountTiny : isSmall ? styles.summaryAmountSmall : styles.summaryAmountLarge,
+              ]}
+              adjustsFontSizeToFit
+              minimumFontScale={0.75}
               numberOfLines={1}
             >
               {summary ? formatCurrency(summary.savings) : '₹0'}
@@ -468,54 +486,80 @@ const FinanceScreen: React.FC = () => {
         </View>
 
         {/* Time Filter */}
-        <View style={styles.filterContainer}>
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterScrollContent}
-          >
-            <TouchableOpacity 
-              onPress={() => setTimePeriod('day')} 
-              style={[styles.filterButton, timePeriod === 'day' && styles.activeFilter]}
-            >
-              <Text style={[styles.filterText, timePeriod === 'day' && styles.activeFilterText]}>Day</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setTimePeriod('month')} 
-              style={[styles.filterButton, timePeriod === 'month' && styles.activeFilter]}
-            >
-              <Text style={[styles.filterText, timePeriod === 'month' && styles.activeFilterText]}>Month</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              onPress={() => setTimePeriod('year')} 
-              style={[styles.filterButton, timePeriod === 'year' && styles.activeFilter]}
-            >
-              <Text style={[styles.filterText, timePeriod === 'year' && styles.activeFilterText]}>Year</Text>
-            </TouchableOpacity>
-          </ScrollView>
+        <View style={[styles.filterContainer, isTiny && { width: '100%' }]}>
+          <TouchableOpacity onPress={() => setTimePeriod('day')} style={[styles.filterButton, timePeriod === 'day' && styles.activeFilter]}>
+            <Text style={[styles.filterText, timePeriod === 'day' && styles.activeFilterText]}>Day</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setTimePeriod('month')} style={[styles.filterButton, timePeriod === 'month' && styles.activeFilter]}>
+            <Text style={[styles.filterText, timePeriod === 'month' && styles.activeFilterText]}>Month</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setTimePeriod('year')} style={[styles.filterButton, timePeriod === 'year' && styles.activeFilter]}>
+            <Text style={[styles.filterText, timePeriod === 'year' && styles.activeFilterText]}>Year</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Income Sources */}
-        <View style={[styles.section, isSmall && styles.sectionSmall]}>
+        <View style={[styles.section, (isSmall || isTiny) && styles.sectionSmall]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Income Sources</Text>
+            <View style={styles.sectionHeaderRight}>
+              <View style={[styles.categoryToggle, (isSmall || isTiny) && styles.categoryToggleCompact]}>
+                <TouchableOpacity
+                  onPress={() => setShowTopIncome(true)}
+                  style={[styles.toggleButton, (isSmall || isTiny) && styles.toggleButtonCondensed, showTopIncome && styles.toggleButtonActive]}
+                >
+                  <Text style={[styles.toggleText, (isSmall || isTiny) && styles.toggleTextSmall, showTopIncome && styles.toggleTextActive]}>Top 5</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowTopIncome(false)}
+                  disabled={!incomePie.hasOverflow}
+                  style={[
+                    styles.toggleButton,
+                    (isSmall || isTiny) && styles.toggleButtonCondensed,
+                    !showTopIncome && styles.toggleButtonActive,
+                    !incomePie.hasOverflow && styles.toggleButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      (isSmall || isTiny) && styles.toggleTextSmall,
+                      !showTopIncome && styles.toggleTextActive,
+                      !incomePie.hasOverflow && styles.toggleTextDisabled,
+                    ]}
+                  >
+                    Others
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
           {incomeChartData.length > 0 ? (
-            <View style={styles.chartContainer}>
+            <View style={[styles.chartContainer, styles.chartContainerAligned, isTiny && styles.chartContainerCompact]}>
               <PieChart
                 data={incomeChartData}
                 width={chartWidth}
-                height={220}
+                height={chartHeight}
                 chartConfig={chartConfig}
                 accessor="population"
                 backgroundColor="transparent"
+                hasLegend={false}
                 paddingLeft={isSmall ? '0' : '15'}
               />
               <View style={styles.legendContainer}>
-                {incomeChartData.map((s, idx) => (
-                  <View key={idx} style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: s.color }]} />
-                    <Text style={styles.legendText}>{s.name}</Text>
+                {incomeChartData.map((slice, idx) => (
+                  <View
+                    key={idx}
+                    style={[styles.legendItem, (isSmall || isTiny) && styles.legendItemFull]}
+                  >
+                    <View style={[styles.legendColor, { backgroundColor: slice.color }]} />
+                    <Text
+                      style={styles.legendText}
+                      numberOfLines={isTiny ? 2 : 1}
+                      ellipsizeMode="tail"
+                    >
+                      {slice.name}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -526,36 +570,67 @@ const FinanceScreen: React.FC = () => {
         </View>
 
         {/* Expense Categories */}
-        <View style={[styles.section, isSmall && styles.sectionSmall]}>
+        <View style={[styles.section, (isSmall || isTiny) && styles.sectionSmall]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Expense Categories</Text>
             <View style={styles.sectionHeaderRight}>
-              <View style={styles.categoryToggle}>
-                <TouchableOpacity onPress={() => setShowTopExpenses(true)} style={[styles.toggleButton, showTopExpenses && styles.toggleButtonActive]}>
-                  <Text style={[styles.toggleText, showTopExpenses && styles.toggleTextActive]}>Top 5</Text>
+              <View style={[styles.categoryToggle, (isSmall || isTiny) && styles.categoryToggleCompact]}>
+                <TouchableOpacity
+                  onPress={() => setShowTopExpenses(true)}
+                  style={[styles.toggleButton, (isSmall || isTiny) && styles.toggleButtonCondensed, showTopExpenses && styles.toggleButtonActive]}
+                >
+                  <Text style={[styles.toggleText, (isSmall || isTiny) && styles.toggleTextSmall, showTopExpenses && styles.toggleTextActive]}>Top 5</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setShowTopExpenses(false)} style={[styles.toggleButton, !showTopExpenses && styles.toggleButtonActive]}>
-                  <Text style={[styles.toggleText, !showTopExpenses && styles.toggleTextActive]}>Others</Text>
+                <TouchableOpacity
+                  onPress={() => setShowTopExpenses(false)}
+                  disabled={!expensePie.hasOverflow}
+                  style={[
+                    styles.toggleButton,
+                    (isSmall || isTiny) && styles.toggleButtonCondensed,
+                    !showTopExpenses && styles.toggleButtonActive,
+                    !expensePie.hasOverflow && styles.toggleButtonDisabled,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.toggleText,
+                      (isSmall || isTiny) && styles.toggleTextSmall,
+                      !showTopExpenses && styles.toggleTextActive,
+                      !expensePie.hasOverflow && styles.toggleTextDisabled,
+                    ]}
+                  >
+                    Others
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
           {expenseChartData.length > 0 ? (
-            <View style={styles.chartContainer}>
+            <View style={[styles.chartContainer, styles.chartContainerAligned, isTiny && styles.chartContainerCompact]}>
               <PieChart
                 data={expenseChartData}
                 width={chartWidth}
-                height={220}
+                height={chartHeight}
                 chartConfig={chartConfig}
                 accessor="population"
                 backgroundColor="transparent"
+                hasLegend={false}
                 paddingLeft={isSmall ? '0' : '15'}
               />
               <View style={styles.legendContainer}>
-                {expenseChartData.map((s, idx) => (
-                  <View key={idx} style={styles.legendItem}>
-                    <View style={[styles.legendColor, { backgroundColor: s.color }]} />
-                    <Text style={styles.legendText}>{s.name}</Text>
+                {expenseChartData.map((slice, idx) => (
+                  <View
+                    key={idx}
+                    style={[styles.legendItem, (isSmall || isTiny) && styles.legendItemFull]}
+                  >
+                    <View style={[styles.legendColor, { backgroundColor: slice.color }]} />
+                    <Text
+                      style={styles.legendText}
+                      numberOfLines={isTiny ? 2 : 1}
+                      ellipsizeMode="tail"
+                    >
+                      {slice.name}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -568,7 +643,7 @@ const FinanceScreen: React.FC = () => {
         {/* Expenses Trend */}
         <View style={[styles.section, isSmall && styles.sectionSmall]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Expenses</Text>
+            <Text style={[styles.sectionTitle, (isSmall || isTiny) && styles.sectionTitleSmall]}>Expenses</Text>
             <View style={styles.miniFilter}>
               <TouchableOpacity onPress={() => setTimePeriod('day')} style={[styles.miniFilterBtn, timePeriod === 'day' && styles.miniFilterActive]}>
                 <Text style={[styles.miniFilterText, timePeriod === 'day' && styles.miniFilterTextActive]}>Day</Text>
@@ -585,12 +660,12 @@ const FinanceScreen: React.FC = () => {
             <LineChart
               data={expensesTrendData}
               width={chartWidth}
-              height={220}
+              height={Math.max(chartHeight, 200)}
               chartConfig={chartConfig}
               bezier
               withInnerLines
               withOuterLines
-              style={styles.chart}
+              style={StyleSheet.flatten([styles.chart, { width: chartWidth }])}
             />
           ) : (
             <View style={styles.emptyChart}><Text style={styles.emptyText}>No expense trend data</Text></View>
@@ -600,7 +675,7 @@ const FinanceScreen: React.FC = () => {
         {/* Income Trend */}
         <View style={[styles.section, isSmall && styles.sectionSmall]}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Income</Text>
+            <Text style={[styles.sectionTitle, (isSmall || isTiny) && styles.sectionTitleSmall]}>Income</Text>
             <View style={styles.miniFilter}>
               <TouchableOpacity onPress={() => setTimePeriod('day')} style={[styles.miniFilterBtn, timePeriod === 'day' && styles.miniFilterActive]}>
                 <Text style={[styles.miniFilterText, timePeriod === 'day' && styles.miniFilterTextActive]}>Day</Text>
@@ -617,12 +692,12 @@ const FinanceScreen: React.FC = () => {
             <LineChart
               data={incomeTrendData}
               width={chartWidth}
-              height={220}
+              height={Math.max(chartHeight, 200)}
               chartConfig={chartConfig}
               bezier
               withInnerLines
               withOuterLines
-              style={styles.chart}
+              style={StyleSheet.flatten([styles.chart, { width: chartWidth }])}
             />
           ) : (
             <View style={styles.emptyChart}><Text style={styles.emptyText}>No income trend data</Text></View>
@@ -665,11 +740,21 @@ const styles = StyleSheet.create({
     ...typography.display,
     color: colors.textPrimary,
   },
+  titleSmall: {
+    fontSize: 32,
+    lineHeight: 38,
+  },
   summaryContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: spacing.sm,
+  },
+  summaryContainerWide: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   summaryContainerStack: {
     flexDirection: 'column',
@@ -708,9 +793,18 @@ const styles = StyleSheet.create({
   summaryAmount: {
     color: colors.textPrimary,
     fontWeight: '700',
-    fontSize: 28,
+    fontSize: 26,
     marginBottom: 2,
     includeFontPadding: false,
+  },
+  summaryAmountLarge: {
+    fontSize: 28,
+  },
+  summaryAmountSmall: {
+    fontSize: 24,
+  },
+  summaryAmountTiny: {
+    fontSize: 20,
   },
   summaryTrend: {
     ...typography.caption,
@@ -719,28 +813,22 @@ const styles = StyleSheet.create({
   positiveTrend: { color: '#10B981' },
   negativeTrend: { color: '#EF4444' },
   filterContainer: {
+    flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radii.pill,
+    padding: 4,
     borderWidth: 1,
     borderColor: colors.border,
+    alignSelf: 'center',
     marginBottom: spacing.md,
     maxWidth: '100%',
-    height: 44,
-    justifyContent: 'center',
-  },
-  filterScrollContent: {
-    paddingHorizontal: 8,
-    alignItems: 'center',
   },
   filterButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    marginHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: radii.pill,
     alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 60,
-    height: 32,
+    minWidth: 70,
   },
   activeFilter: { 
     backgroundColor: colors.primary,
@@ -751,13 +839,13 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   filterText: {
-    fontSize: 13,
-    fontWeight: '500',
+    fontSize: 14,
+    fontWeight: '600',
     color: colors.textSecondary,
   },
   activeFilterText: { 
     color: colors.surface,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   section: {
     backgroundColor: colors.surface,
@@ -799,42 +887,58 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     marginRight: spacing.sm,
   },
-  chart: { 
-    marginVertical: spacing.sm, 
+  sectionTitleSmall: {
+    fontSize: 16,
+  },
+  chart: {
+    marginVertical: spacing.sm,
     borderRadius: radii.md,
     paddingRight: 0,
   },
-  chartContainer: { 
-    alignItems: 'center',
+  chartContainer: {
+    alignItems: 'stretch',
     width: '100%',
     overflow: 'hidden',
   },
-  legendContainer: { 
-    marginTop: spacing.sm,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  chartContainerAligned: {
+    alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 4,
+  },
+  chartContainerCompact: {
+    paddingHorizontal: spacing.sm,
+  },
+  legendContainer: {
+    marginTop: spacing.md, 
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'flex-start',
   },
   legendItem: { 
     flexDirection: 'row', 
     alignItems: 'center', 
-    marginRight: 8,
-    marginBottom: 6,
+    gap: spacing.xs,
+    marginRight: spacing.sm,
+    marginBottom: 4,
     maxWidth: '45%',
   },
+  legendItemFull: {
+    maxWidth: '100%',
+    flexBasis: '100%',
+    justifyContent: 'flex-start',
+  },
   legendColor: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4,
-    marginRight: 4,
+    width: 10, 
+    height: 10, 
+    borderRadius: 5,
     flexShrink: 0,
   },
   legendText: { 
-    fontSize: 10,
+    fontSize: 12,
     color: colors.textSecondary,
     flexShrink: 1,
-    lineHeight: 12,
+    flexWrap: 'wrap',
   },
   emptyChart: { 
     height: 160, 
@@ -851,10 +955,15 @@ const styles = StyleSheet.create({
     padding: spacing.md,
   },
   categoryToggle: { flexDirection: 'row', gap: spacing.sm },
+  categoryToggleCompact: { gap: spacing.xs },
   toggleButton: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border },
+  toggleButtonCondensed: { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, flex: 1, minWidth: 0 },
   toggleButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  toggleButtonDisabled: { opacity: 0.5 },
   toggleText: { ...typography.body, color: colors.textSecondary },
+  toggleTextSmall: { fontSize: 12 },
   toggleTextActive: { color: colors.surface },
+  toggleTextDisabled: { color: colors.textTertiary },
   trendHint: { ...typography.caption, color: colors.textTertiary },
   miniFilter: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radii.pill },
   miniFilterBtn: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: radii.pill },

@@ -11,37 +11,60 @@ interface TabIconProps {
 }
 
 const TabIcon: FC<TabIconProps> = ({ focused, routeName }) => {
-  const iconColor = focused ? colors.surface : "#A0A0A0";
-  const size = routeName === "Add" ? 28 : 24;
+  const iconColor = focused ? colors.surface : "#6B7280";
+  const size = routeName === "Add" ? 28 : 26;
 
   switch (routeName) {
     case "Home":
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
           <Path
-            d="M3 9L12 2L21 9V20C21 20.5304 20.7893 21.0391 20.4142 21.4142C20.0391 21.7893 19.5304 22 19 22H5C4.46957 22 3.96086 21.7893 3.58579 21.4142C3.21071 21.0391 3 20.5304 3 20V9Z"
-            stroke={iconColor}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <Path
-            d="M9 22V12H15V22"
-            stroke={iconColor}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            d="M11.47 2.72a.75.75 0 0 1 1.06 0l8.75 8.5a.75.75 0 0 1-1.03 1.09l-.5-.49V21a.75.75 0 0 1-.75.75h-4.5a.75.75 0 0 1-.75-.75v-4a.75.75 0 0 0-.75-.75h-2a.75.75 0 0 0-.75.75v4a.75.75 0 0 1-.75.75H4.5A.75.75 0 0 1 3.75 21v-9.78l-.5.49a.75.75 0 0 1-1.03-1.09l8.75-8.5Z"
+            fill={iconColor}
           />
         </Svg>
       );
 
-    case "Analytics":
+    case "Finance":
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
-          <Path
-            d="M18 20V10M12 20V4M6 20V14"
+          <Circle
+            cx={12}
+            cy={12}
+            r={9}
             stroke={iconColor}
-            strokeWidth={2}
+            strokeWidth={1.8}
+            fill="none"
+          />
+          <Path
+            d="M10.5 7.5h5"
+            stroke={iconColor}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+          />
+          <Path
+            d="M10.5 11h4a2 2 0 0 1 0 4H12"
+            stroke={iconColor}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <Path
+            d="M10.5 9.25h4"
+            stroke={iconColor}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+          />
+          <Path
+            d="M11.75 6v12"
+            stroke={iconColor}
+            strokeWidth={1.8}
+            strokeLinecap="round"
+          />
+          <Path
+            d="M12 15h3"
+            stroke={iconColor}
+            strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -76,23 +99,25 @@ const TabIcon: FC<TabIconProps> = ({ focused, routeName }) => {
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
           <Path
-            d="M9 5H7C6.46957 5 5.96086 5.21071 5.58579 5.58579C5.21071 5.96086 5 6.46957 5 7V19C5 19.5304 5.21071 20.0391 5.58579 20.4142C5.96086 20.7893 6.46957 21 7 21H17C17.5304 21 18.0391 20.7893 18.4142 20.4142C18.7893 20.0391 19 19.5304 19 19V7C19 6.46957 18.7893 5.96086 18.4142 5.58579C18.0391 5.21071 17.5304 5 17 5H15"
+            d="M8 6.5h8A2.5 2.5 0 0 1 18.5 9v9.5A2.5 2.5 0 0 1 16 21H8A2.5 2.5 0 0 1 5.5 18.5V9A2.5 2.5 0 0 1 8 6.5Z"
             stroke={iconColor}
-            strokeWidth={2}
+            strokeWidth={1.8}
+            fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <Path
-            d="M9 3H15V5H9V3Z"
+            d="M9 4h6v2H9z"
             stroke={iconColor}
-            strokeWidth={2}
+            strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
+            fill="none"
           />
           <Path
-            d="M9 12L11 14L15 10"
+            d="M9 12.5l2.25 2.25L15.5 10"
             stroke={iconColor}
-            strokeWidth={2}
+            strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -103,18 +128,17 @@ const TabIcon: FC<TabIconProps> = ({ focused, routeName }) => {
       return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
           <Circle
-            cx="12"
-            cy="7"
-            r="4"
+            cx={12}
+            cy={8.5}
+            r={3.5}
             stroke={iconColor}
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
+            strokeWidth={1.8}
+            fill="none"
           />
           <Path
-            d="M5.5 21C5.5 17.9624 7.96243 15.5 11 15.5H13C16.0376 15.5 18.5 17.9624 18.5 21"
+            d="M6.5 19.5c1.2-3.4 4.1-4.75 5.5-4.75h0c1.4 0 4.3 1.35 5.5 4.75"
             stroke={iconColor}
-            strokeWidth={2}
+            strokeWidth={1.8}
             strokeLinecap="round"
             strokeLinejoin="round"
           />

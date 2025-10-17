@@ -17,6 +17,7 @@ interface AuthContextType {
   register: (userData: { name: string; username: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile: (profileData: { name?: string; username?: string; email?: string; avatar?: string }) => Promise<void>;
+  updatePassword: (passwordData: { currentPassword: string; newPassword: string }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -94,6 +95,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const updatePassword = async (passwordData: { currentPassword: string; newPassword: string }) => {
+    try {
+      await authService.changePassword(passwordData);
+    } catch (error) {
+      console.error('Change password error:', error);
+      throw error;
+    }
+  };
+
   const value: AuthContextType = {
     user,
     isLoading,
@@ -102,6 +112,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     updateProfile,
+    updatePassword,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

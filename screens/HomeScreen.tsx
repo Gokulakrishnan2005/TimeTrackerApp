@@ -340,7 +340,7 @@ export const HomeScreen = () => {
           </View>
         ) : null}
         <View style={styles.header}>
-          <Text style={styles.greeting}>Hi Gokul! 👋</Text>
+          <Text style={styles.greeting}>Hi Dude! 👋</Text>
           <Text style={styles.subtitle}>Build your 1% better self</Text>
         </View>
 
