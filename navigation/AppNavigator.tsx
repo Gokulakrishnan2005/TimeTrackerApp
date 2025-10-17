@@ -5,7 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { HomeScreen } from "../screens/HomeScreen";
 import { AnalyticsScreen } from "../screens/AnalyticsScreen";
-import { TasksScreen } from "../screens/TasksScreen";
+import TasksScreen from "../screens/TasksScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 
 export type RootTabParamList = {

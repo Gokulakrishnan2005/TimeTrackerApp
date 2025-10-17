@@ -145,6 +145,14 @@ export const CircularTabBar: FC<BottomTabBarProps> = ({
             canPreventDefault: true,
           });
 
+          // Special handling: always trigger Add tab with a changing param
+          if (route.name === "Add") {
+            if (!event.defaultPrevented) {
+              navigation.navigate("Add", { openAt: Date.now() });
+            }
+            return;
+          }
+
           if (!isFocused && !event.defaultPrevented) {
             navigation.navigate(route.name);
           }

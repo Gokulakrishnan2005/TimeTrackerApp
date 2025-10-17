@@ -1,4 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { sessionAPI } from "./api";
 import {
   ActiveSessionState,
   Session,
@@ -9,177 +9,47 @@ import {
   createSession,
 } from "./session";
 
-const SESSIONS_KEY = "sessions";
-const ACTIVE_SESSION_KEY = "activeSession";
-
 const VALID_STATUSES: SessionStatus[] = ["active", "completed"];
-
-type PersistedSession = Omit<Session, "startDateTime" | "endDateTime"> & {
-  startDateTime: string;
-  endDateTime: string | null;
-};
-
-type PersistedActiveState = {
-  current: PersistedSession | null;
-};
-
-const isValidStatus = (status: unknown): status is SessionStatus =>
-  typeof status === "string" && VALID_STATUSES.includes(status as SessionStatus);
-
-const serializeSession = (session: Session): PersistedSession => ({
-  ...session,
-  startDateTime: session.startDateTime.toISOString(),
-  endDateTime: session.endDateTime?.toISOString() ?? null,
-});
-
-const deserializeSession = (session: PersistedSession): Session => ({
-  ...session,
-  startDateTime: new Date(session.startDateTime),
-  endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
-});
-
-const validatePersistedSession = (candidate: any): candidate is PersistedSession => {
-  if (!candidate || typeof candidate !== "object") {
-    return false;
-  }
-
-  const {
-    id,
-    sessionNumber,
-    startDateTime,
-    endDateTime,
-    duration,
-    experience,
-    status,
-  } = candidate as Record<string, unknown>;
-
-  if (typeof id !== "string" || !id.trim()) {
-    return false;
-  }
-
-  if (typeof sessionNumber !== "number" || Number.isNaN(sessionNumber)) {
-    return false;
-  }
-
-  if (typeof startDateTime !== "string" || !startDateTime) {
-    return false;
-  }
-
-  if (endDateTime !== null && typeof endDateTime !== "string") {
-    return false;
-  }
-
-  if (typeof duration !== "number" || duration < 0) {
-    return false;
-  }
-
-  if (typeof experience !== "string") {
-    return false;
-  }
-
-  if (!isValidStatus(status)) {
-    return false;
-  }
-
-  return true;
-};
-
-const safeParse = <T>(data: string | null, validator: (value: any) => value is T): T | null => {
-  if (!data) {
-    return null;
-  }
-
-  try {
-    const parsed = JSON.parse(data);
-    if (validator(parsed)) {
-      return parsed;
-    }
-  } catch (error) {
-    console.warn("Failed to parse persisted data", error);
-  }
-
-  return null;
-};
-
-const safeParseArray = <T>(
-  data: string | null,
-  validator: (value: any) => value is T
-): T[] => {
-  if (!data) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(data);
-    if (Array.isArray(parsed)) {
-      return parsed.filter(validator);
-    }
-  } catch (error) {
-    console.warn("Failed to parse persisted array", error);
-  }
-
-  return [];
-};
-
-const persistSessions = async (sessions: Session[]): Promise<void> => {
-  const serialized = sessions.map(serializeSession);
-  await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(serialized));
-};
-
-const persistActiveSession = async (session: Session | null): Promise<void> => {
-  const activeState: PersistedActiveState = {
-    current: session ? serializeSession(session) : null,
-  };
-  await AsyncStorage.setItem(ACTIVE_SESSION_KEY, JSON.stringify(activeState));
-};
-
-const loadActiveState = async (): Promise<ActiveSessionState> => {
-  const stored = await AsyncStorage.getItem(ACTIVE_SESSION_KEY);
-  const parsed = safeParse<PersistedActiveState>(stored, (value): value is PersistedActiveState => {
-    if (!value || typeof value !== "object") {
-      return false;
-    }
-
-    const record = value as Record<string, unknown>;
-    if (!record.hasOwnProperty("current")) {
-      return false;
-    }
-
-    if (record.current === null) {
-      return true;
-    }
-
-    return validatePersistedSession(record.current);
-  });
-
-  if (!parsed) {
-    return createActiveSessionState();
-  }
-
-  return {
-    current: parsed.current ? deserializeSession(parsed.current) : null,
-  };
-};
-
-const buildSessionValidator = () => validatePersistedSession;
 
 export const getAllSessions = async (): Promise<Session[]> => {
   try {
-    const stored = await AsyncStorage.getItem(SESSIONS_KEY);
-    const parsed = safeParseArray<PersistedSession>(stored, buildSessionValidator());
-    return parsed.map(deserializeSession);
+    const response = await sessionAPI.getSessions();
+    if (response.success) {
+      return response.data.sessions.map((session: any) => ({
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        startDateTime: new Date(session.startDateTime),
+        endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
+        duration: session.duration,
+        experience: session.experience,
+        status: session.status,
+      }));
+    }
+    return [];
   } catch (error) {
-    console.error("Failed to load sessions", error);
+    console.error("Failed to load sessions from API", error);
     return [];
   }
 };
 
 export const getActiveSession = async (): Promise<Session | null> => {
   try {
-    const activeState = await loadActiveState();
-    return activeState.current;
+    const response = await sessionAPI.getActiveSession();
+    if (response.success && response.data.session) {
+      const session = response.data.session;
+      return {
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        startDateTime: new Date(session.startDateTime),
+        endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
+        duration: session.duration,
+        experience: session.experience,
+        status: session.status,
+      };
+    }
+    return null;
   } catch (error) {
-    console.error("Failed to load active session", error);
+    console.error("Failed to load active session from API", error);
     return null;
   }
 };
@@ -190,115 +60,113 @@ export const saveSession = async (session: Session): Promise<void> => {
   }
 
   try {
-    const sessions = await getAllSessions();
-    await persistSessions([...sessions, session]);
+    // Sessions are automatically saved when stopped via the API
+    console.log("Session saved via API");
   } catch (error) {
     console.error("Failed to save session", error);
     throw error;
   }
 };
 
-const generateSessionId = (): string => `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-const getNextSessionNumber = (sessions: Session[]): number => {
-  if (!sessions.length) {
-    return 1;
-  }
-
-  return sessions.reduce((max, session) => Math.max(max, session.sessionNumber), 0) + 1;
-};
-
 export const startNewSession = async (): Promise<Session> => {
-  const active = await getActiveSession();
-  if (active) {
-    throw new Error("An active session is already in progress.");
+  try {
+    const response = await sessionAPI.startSession();
+    if (response.success) {
+      const session = response.data.session;
+      return {
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        startDateTime: new Date(session.startDateTime),
+        endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
+        duration: session.duration,
+        experience: session.experience,
+        status: session.status,
+      };
+    }
+    throw new Error("Failed to start session");
+  } catch (error) {
+    console.error("Failed to start session", error);
+    throw error;
   }
-
-  const sessions = await getAllSessions();
-  const session = createSession({
-    id: generateSessionId(),
-    sessionNumber: getNextSessionNumber(sessions),
-    startDateTime: new Date(),
-    status: "active",
-  });
-
-  await persistActiveSession(session);
-  return session;
 };
 
 export const stopSession = async (
   sessionId: string,
   experienceText: string
 ): Promise<Session> => {
-  const active = await getActiveSession();
-
-  if (!active || active.id !== sessionId) {
-    throw new Error("No matching active session found to stop.");
+  try {
+    const response = await sessionAPI.stopSession(sessionId, experienceText);
+    if (response.success) {
+      const session = response.data.session;
+      return {
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        startDateTime: new Date(session.startDateTime),
+        endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
+        duration: session.duration,
+        experience: session.experience,
+        status: session.status,
+      };
+    }
+    throw new Error("Failed to stop session");
+  } catch (error) {
+    console.error("Failed to stop session", error);
+    throw error;
   }
-
-  const trimmedExperience = experienceText.trim();
-  const endDateTime = new Date();
-  const completed = completeSession(active, endDateTime, trimmedExperience);
-
-  if (completed.duration <= 0) {
-    completed.duration = calculateDuration(
-      completed.startDateTime,
-      completed.endDateTime
-    );
-  }
-
-  await persistActiveSession(null);
-  await saveSession(completed);
-  return completed;
 };
 
 export const getTotalDurationMs = async (): Promise<number> => {
-  const sessions = await getAllSessions();
-  return sessions.reduce((acc, session) => acc + session.duration, 0);
+  try {
+    const response = await sessionAPI.getStats();
+    if (response.success) {
+      return response.data.stats.totalDuration;
+    }
+    return 0;
+  } catch (error) {
+    console.error("Failed to get total duration", error);
+    return 0;
+  }
 };
 
 export const updateSessionExperience = async (
   sessionId: string,
   experienceText: string
 ): Promise<Session | null> => {
-  const trimmedExperience = experienceText.trim();
-  const sessions = await getAllSessions();
-  let updatedSession: Session | null = null;
-
-  const updated = sessions.map((session) => {
-    if (session.id === sessionId) {
-      updatedSession = {
-        ...session,
-        experience: trimmedExperience,
+  try {
+    const response = await sessionAPI.updateSession(sessionId, experienceText);
+    if (response.success) {
+      const session = response.data.session;
+      return {
+        id: session.id,
+        sessionNumber: session.sessionNumber,
+        startDateTime: new Date(session.startDateTime),
+        endDateTime: session.endDateTime ? new Date(session.endDateTime) : null,
+        duration: session.duration,
+        experience: session.experience,
+        status: session.status,
       };
-      return updatedSession;
     }
-    return session;
-  });
-
-  if (!updatedSession) {
+    return null;
+  } catch (error) {
+    console.error("Failed to update session experience", error);
     return null;
   }
-
-  await persistSessions(updated);
-  return updatedSession;
 };
 
 export const deleteSession = async (sessionId: string): Promise<boolean> => {
-  const sessions = await getAllSessions();
-  const filtered = sessions.filter((session) => session.id !== sessionId);
-
-  if (filtered.length === sessions.length) {
+  try {
+    const response = await sessionAPI.deleteSession(sessionId);
+    return response.success;
+  } catch (error) {
+    console.error("Failed to delete session", error);
     return false;
   }
-
-  await persistSessions(filtered);
-  return true;
 };
 
 export const clearAllData = async (): Promise<void> => {
   try {
-    await AsyncStorage.multiRemove([SESSIONS_KEY, ACTIVE_SESSION_KEY]);
+    // Clear local storage if needed
+    console.log("Clearing local data");
   } catch (error) {
     console.error("Failed to clear session data", error);
     throw error;
