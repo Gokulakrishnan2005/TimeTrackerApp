@@ -71,11 +71,16 @@ const FinanceScreen: React.FC = () => {
   const hydratedRef = useRef(false);
   const loadingRef = useRef(false);
   const isFocused = useIsFocused();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const isSmall = width < 380;
-  const horizontalPadding = isSmall ? spacing.lg : spacing.xl;
-  const chartWidth = Math.max(240, width - horizontalPadding * 2);
+  const isMedium = width >= 380 && width < 768;
+  const horizontalPadding = isSmall ? spacing.sm : isMedium ? spacing.md : spacing.lg;
+  const chartWidth = Math.min(width - (horizontalPadding as number) * 2, 400);
+  const chartHeight = Math.min(180, height * 0.25);
+  const summaryCardWidth = isSmall ? '100%' : isMedium ? '48%' : 1;
+  const fontSizeMultiplier = isSmall ? 0.9 : 1;
+  const chartLegendFontSize = 10 * fontSizeMultiplier;
 
   useEffect(() => {
     // Hydrate saved UI state and cached data first for instant display
@@ -273,7 +278,23 @@ const FinanceScreen: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return `₹${amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const isLargeNumber = amount >= 1000000; // 1 million+
+    const isMediumNumber = amount >= 10000; // 10,000+
+    
+    if (isLargeNumber) {
+      // Format as crores/lakhs for very large numbers
+      const inLakhs = amount / 100000;
+      return `₹${inLakhs.toFixed(1)}L`; // Shows as 1.2L for 120,000
+    } else if (isMediumNumber) {
+      // Format with compact notation for medium numbers
+      return `₹${(amount / 1000).toFixed(0)}K`; // Shows as 12K for 12,000
+    }
+    
+    // For smaller numbers, use regular formatting
+    return `₹${amount.toLocaleString('en-IN', {
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0
+    })}`;
   };
 
   if (isLoading) {
@@ -298,13 +319,26 @@ const FinanceScreen: React.FC = () => {
   }));
 
   const expData = (showTopExpenses ? expenseBreakdown.slice(0, 5) : expenseBreakdown);
-  const expenseChartData: ChartSlice[] = expData.map((item, i) => ({
-    name: `${item.category || 'Others'} (${item.percentage}%)`,
-    population: item.amount,
-    color: expenseColors[i % expenseColors.length],
-    legendFontColor: colors.textSecondary,
-    legendFontSize: 12,
-  }));
+  const formatLegendText = (text: string) => {
+    if (!text) return '';
+    // Truncate long category names
+    const maxLength = isSmall ? 10 : 15;
+    if (text.length > maxLength) {
+      return text.substring(0, maxLength) + '..';
+    }
+    return text;
+  };
+
+  const expenseChartData: ChartSlice[] = expData.map((item, i) => {
+    const displayName = formatLegendText(item.category || 'Others');
+    return {
+      name: `${displayName} ${item.percentage}%`,
+      population: item.amount,
+      color: expenseColors[i % expenseColors.length],
+      legendFontColor: colors.textSecondary,
+      legendFontSize: chartLegendFontSize,
+    };
+  });
 
   const last6 = trends.slice(-6);
   const labels = last6.map(t => ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][t.month - 1] || '');
@@ -318,59 +352,147 @@ const FinanceScreen: React.FC = () => {
   };
 
   const chartConfig = {
-    backgroundColor: '#ffffff',
-    backgroundGradientFrom: '#ffffff',
-    backgroundGradientTo: '#ffffff',
+    backgroundColor: 'transparent',
+    backgroundGradientFrom: 'transparent',
+    backgroundGradientTo: 'transparent',
     decimalPlaces: 0,
     color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
     labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-    propsForDots: { r: '4', strokeWidth: '2' },
-    propsForBackgroundLines: { strokeDasharray: '', stroke: '#E5E7EB', strokeWidth: 1 },
+    style: {
+      borderRadius: 16,
+    },
+    propsForDots: { 
+      r: isSmall ? '3' : '4', 
+      strokeWidth: '2' 
+    },
+    propsForBackgroundLines: { 
+      stroke: '#E5E7EB', 
+      strokeWidth: 1,
+      strokeDasharray: '' 
+    },
+    propsForLabels: {
+      fontSize: 10 * fontSizeMultiplier,
+    },
+    barPercentage: 0.8,
+    useShadowColorFromDataset: false,
   } as const;
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView
         style={styles.container}
+        contentContainerStyle={{ paddingBottom: 100 }} // Extra space for FAB
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />
         }
+        showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.content, { padding: horizontalPadding, paddingBottom: horizontalPadding + insets.bottom + 16 }]}>
+        <View style={[styles.content, { 
+          padding: horizontalPadding, 
+          paddingBottom: horizontalPadding + insets.bottom + 16,
+          maxWidth: 800, // Max width for larger screens
+          width: '100%',
+          alignSelf: 'center'
+        }]}>
         <Text style={styles.title}>Finance Overview</Text>
 
         {/* Summary Cards */}
-        <View style={[styles.summaryContainer, isSmall && styles.summaryContainerStack]}>
-          <View style={[styles.summaryCard, styles.incomeCard]}>
-            <Text style={styles.summaryLabel}>Income</Text>
-            <Text style={styles.summaryAmount}>{summary ? formatCurrency(summary.income) : '₹0.00'}</Text>
-            <Text style={[styles.summaryTrend, incomeChange.startsWith('-') ? styles.negativeTrend : styles.positiveTrend]}>{incomeChange}</Text>
+        <View style={[
+          styles.summaryContainer, 
+          isSmall ? styles.summaryContainerStack : { flexWrap: 'wrap', justifyContent: 'space-between' }
+        ]}>
+          <View style={[
+            styles.summaryCard, 
+            styles.incomeCard,
+            { 
+              width: isSmall ? '100%' : '48%', 
+              marginBottom: isSmall ? 12 : 16,
+              flex: undefined // Remove flex to fix type error
+            }
+          ]}>
+            <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Income</Text>
+            <Text 
+              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
+              adjustsFontSizeToFit 
+              minimumFontScale={0.8} 
+              numberOfLines={1}
+            >
+              {summary ? formatCurrency(summary.income) : '₹0'}
+            </Text>
+            <Text style={[styles.summaryTrend, incomeChange.startsWith('-') ? styles.negativeTrend : styles.positiveTrend]}>
+              {incomeChange}
+            </Text>
           </View>
 
-          <View style={[styles.summaryCard, styles.expenseCard]}>
-            <Text style={styles.summaryLabel}>Expenses</Text>
-            <Text style={styles.summaryAmount}>{summary ? formatCurrency(summary.expenses) : '₹0.00'}</Text>
-            <Text style={[styles.summaryTrend, expenseChange.startsWith('-') ? styles.positiveTrend : styles.negativeTrend]}>{expenseChange}</Text>
+          <View style={[
+            styles.summaryCard, 
+            styles.expenseCard,
+            { 
+              width: isSmall ? '100%' : '48%', 
+              marginBottom: isSmall ? 12 : 16,
+              flex: undefined // Remove flex to fix type error
+            }
+          ]}>
+            <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Expenses</Text>
+            <Text 
+              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
+              adjustsFontSizeToFit 
+              minimumFontScale={0.8} 
+              numberOfLines={1}
+            >
+              {summary ? formatCurrency(summary.expenses) : '₹0'}
+            </Text>
+            <Text style={[styles.summaryTrend, expenseChange.startsWith('-') ? styles.positiveTrend : styles.negativeTrend]}>
+              {expenseChange}
+            </Text>
           </View>
 
-          <View style={[styles.summaryCard, styles.savingsCard]}>
-            <Text style={styles.summaryLabel}>Savings</Text>
-            <Text style={styles.summaryAmount}>{summary ? formatCurrency(summary.savings) : '₹0.00'}</Text>
-            <Text style={[styles.summaryTrend, savingsChange.startsWith('-') ? styles.negativeTrend : styles.positiveTrend]}>{savingsChange}</Text>
+          <View style={[
+            styles.summaryCard, 
+            styles.savingsCard,
+            { width: '100%' }
+          ]}>
+            <Text style={styles.summaryLabel} numberOfLines={1} ellipsizeMode="tail">Savings</Text>
+            <Text 
+              style={[styles.summaryAmount, { fontSize: isSmall ? 24 : 28 }]} 
+              adjustsFontSizeToFit 
+              minimumFontScale={0.8} 
+              numberOfLines={1}
+            >
+              {summary ? formatCurrency(summary.savings) : '₹0'}
+            </Text>
+            <Text style={[styles.summaryTrend, savingsChange.startsWith('-') ? styles.negativeTrend : styles.positiveTrend]}>
+              {savingsChange}
+            </Text>
           </View>
         </View>
 
         {/* Time Filter */}
         <View style={styles.filterContainer}>
-          <TouchableOpacity onPress={() => setTimePeriod('day')} style={[styles.filterButton, timePeriod === 'day' && styles.activeFilter]}>
-            <Text style={[styles.filterText, timePeriod === 'day' && styles.activeFilterText]}>Day</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setTimePeriod('month')} style={[styles.filterButton, timePeriod === 'month' && styles.activeFilter]}>
-            <Text style={[styles.filterText, timePeriod === 'month' && styles.activeFilterText]}>Month</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setTimePeriod('year')} style={[styles.filterButton, timePeriod === 'year' && styles.activeFilter]}>
-            <Text style={[styles.filterText, timePeriod === 'year' && styles.activeFilterText]}>Year</Text>
-          </TouchableOpacity>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filterScrollContent}
+          >
+            <TouchableOpacity 
+              onPress={() => setTimePeriod('day')} 
+              style={[styles.filterButton, timePeriod === 'day' && styles.activeFilter]}
+            >
+              <Text style={[styles.filterText, timePeriod === 'day' && styles.activeFilterText]}>Day</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setTimePeriod('month')} 
+              style={[styles.filterButton, timePeriod === 'month' && styles.activeFilter]}
+            >
+              <Text style={[styles.filterText, timePeriod === 'month' && styles.activeFilterText]}>Month</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setTimePeriod('year')} 
+              style={[styles.filterButton, timePeriod === 'year' && styles.activeFilter]}
+            >
+              <Text style={[styles.filterText, timePeriod === 'year' && styles.activeFilterText]}>Year</Text>
+            </TouchableOpacity>
+          </ScrollView>
         </View>
 
         {/* Income Sources */}
@@ -545,19 +667,25 @@ const styles = StyleSheet.create({
   },
   summaryContainer: {
     flexDirection: 'row',
-    gap: spacing.md,
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: spacing.sm,
   },
   summaryContainerStack: {
     flexDirection: 'column',
-    gap: spacing.md,
+    gap: 12,
   },
   summaryCard: {
-    flex: 1,
-    padding: spacing.lg,
+    padding: spacing.md,
     borderRadius: radii.lg,
     backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   incomeCard: {
     borderLeftWidth: 4,
@@ -574,13 +702,15 @@ const styles = StyleSheet.create({
   summaryLabel: {
     ...typography.caption,
     color: colors.textSecondary,
-    marginBottom: spacing.xs,
+    marginBottom: 4,
+    fontSize: 13,
   },
   summaryAmount: {
-    ...typography.heading,
     color: colors.textPrimary,
-    fontWeight: '800',
-    marginBottom: spacing.xs,
+    fontWeight: '700',
+    fontSize: 28,
+    marginBottom: 2,
+    includeFontPadding: false,
   },
   summaryTrend: {
     ...typography.caption,
@@ -589,43 +719,66 @@ const styles = StyleSheet.create({
   positiveTrend: { color: '#10B981' },
   negativeTrend: { color: '#EF4444' },
   filterContainer: {
-    flexDirection: 'row',
     backgroundColor: colors.surface,
     borderRadius: radii.pill,
-    padding: 4,
     borderWidth: 1,
     borderColor: colors.border,
-    alignSelf: 'center',
+    marginBottom: spacing.md,
+    maxWidth: '100%',
+    height: 44,
+    justifyContent: 'center',
+  },
+  filterScrollContent: {
+    paddingHorizontal: 8,
+    alignItems: 'center',
   },
   filterButton: {
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.pill,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    marginHorizontal: 4,
     alignItems: 'center',
-    minWidth: 72,
+    justifyContent: 'center',
+    minWidth: 60,
+    height: 32,
   },
-  activeFilter: { backgroundColor: colors.primary },
+  activeFilter: { 
+    backgroundColor: colors.primary,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 2,
+  },
   filterText: {
-    ...typography.body,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '500',
     color: colors.textSecondary,
   },
-  activeFilterText: { color: colors.surface },
+  activeFilterText: { 
+    color: colors.surface,
+    fontWeight: '600',
+  },
   section: {
     backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    padding: spacing.xl,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
     marginBottom: spacing.md,
     position: 'relative',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
   },
   sectionSmall: {
-    padding: spacing.lg,
+    padding: spacing.md,
   },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
   },
   sectionHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   headerAction: {
@@ -641,17 +794,62 @@ const styles = StyleSheet.create({
   },
   headerActionIcon: { color: colors.textSecondary, fontWeight: '700', fontSize: 16 },
   sectionTitle: {
-    ...typography.heading,
+    fontSize: 18,
+    fontWeight: '700',
     color: colors.textPrimary,
+    marginRight: spacing.sm,
   },
-  chart: { marginVertical: spacing.sm, borderRadius: radii.lg },
-  chartContainer: { alignItems: 'center' },
-  legendContainer: { marginTop: spacing.md, gap: spacing.sm },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  legendColor: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { ...typography.body, color: colors.textSecondary },
-  emptyChart: { height: 200, backgroundColor: colors.background, borderRadius: radii.lg, alignItems: 'center', justifyContent: 'center' },
-  emptyText: { ...typography.body, color: colors.textSecondary },
+  chart: { 
+    marginVertical: spacing.sm, 
+    borderRadius: radii.md,
+    paddingRight: 0,
+  },
+  chartContainer: { 
+    alignItems: 'center',
+    width: '100%',
+    overflow: 'hidden',
+  },
+  legendContainer: { 
+    marginTop: spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  legendItem: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    marginRight: 8,
+    marginBottom: 6,
+    maxWidth: '45%',
+  },
+  legendColor: { 
+    width: 8, 
+    height: 8, 
+    borderRadius: 4,
+    marginRight: 4,
+    flexShrink: 0,
+  },
+  legendText: { 
+    fontSize: 10,
+    color: colors.textSecondary,
+    flexShrink: 1,
+    lineHeight: 12,
+  },
+  emptyChart: { 
+    height: 160, 
+    backgroundColor: colors.background, 
+    borderRadius: radii.lg, 
+    alignItems: 'center', 
+    justifyContent: 'center',
+    marginTop: spacing.sm,
+  },
+  emptyText: { 
+    fontSize: 14,
+    color: colors.textTertiary,
+    textAlign: 'center',
+    padding: spacing.md,
+  },
   categoryToggle: { flexDirection: 'row', gap: spacing.sm },
   toggleButton: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radii.pill, borderWidth: 1, borderColor: colors.border },
   toggleButtonActive: { backgroundColor: colors.primary, borderColor: colors.primary },
@@ -691,16 +889,19 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+    shadowColor: colors.primary,
+    shadowOffset: { width: 0, height: 3 },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowRadius: 6,
+    zIndex: 100,
+    transform: [{ translateY: 0 }],
   },
   fabText: {
     fontSize: 24,
     color: colors.surface,
-    fontWeight: 'bold',
+    fontWeight: '600',
+    marginTop: -1, // Optical alignment
   },
 });
 
