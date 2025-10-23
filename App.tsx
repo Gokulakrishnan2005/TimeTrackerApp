@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useAuth, AuthProvider } from './contexts/AuthContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from './constants/colors';
 import { spacing } from './constants/theme';
 
@@ -14,8 +14,6 @@ import TasksScreen from './screens/TasksScreen';
 import { ProfileScreen } from './screens/ProfileScreen';
 import FinanceScreen from './screens/FinanceScreen';
 import AddQuickAction from './screens/AddQuickAction';
-import { LoginScreen } from './screens/LoginScreen';
-import { SignupScreen } from './screens/SignupScreen';
 import ConnectionTest from './components/ConnectionTest';
 import { CircularTabBar } from './components/CircularTabBar';
 import ChangePasswordScreen from './screens/ChangePasswordScreen';
@@ -24,13 +22,7 @@ import SpendingHistoryScreen from './screens/SpendingHistoryScreen';
 
 // Navigation types
 export type RootStackParamList = {
-  Auth: undefined;
   Main: undefined;
-};
-
-export type AuthStackParamList = {
-  Login: undefined;
-  Signup: undefined;
 };
 
 export type MainTabParamList = {
@@ -41,7 +33,6 @@ export type MainTabParamList = {
   Profile: undefined;
 };
 
-const AuthStack = createStackNavigator<AuthStackParamList>();
 const MainTab = createBottomTabNavigator<MainTabParamList>();
 const RootStack = createStackNavigator<RootStackParamList>();
 const ProfileStack = createStackNavigator();
@@ -54,21 +45,6 @@ const ProfileNavigator = () => {
       <ProfileStack.Screen name="ProfileNotifications" component={NotificationsScreen} />
       <ProfileStack.Screen name="ProfileSpendingHistory" component={SpendingHistoryScreen} />
     </ProfileStack.Navigator>
-  );
-};
-
-// Authentication navigator
-const AuthNavigator = () => {
-  return (
-    <AuthStack.Navigator
-      screenOptions={{
-        headerShown: false,
-      }}
-    >
-      <AuthStack.Screen name="Login" component={LoginScreen} />
-      <AuthStack.Screen name="Signup" component={SignupScreen} />
-      {/* ConnectionTest available but not in main flow */}
-    </AuthStack.Navigator>
   );
 };
 
@@ -99,31 +75,51 @@ const LoadingScreen = () => (
 
 // Main app component
 const AppContent = () => {
-  const { isAuthenticated, isLoading } = useAuth();
-
-  if (isLoading) {
-    return <LoadingScreen />;
-  }
-
   return (
     <NavigationContainer>
       <RootStack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
-          <RootStack.Screen name="Main" component={MainNavigator} />
-        ) : (
-          <RootStack.Screen name="Auth" component={AuthNavigator} />
-        )}
+        <RootStack.Screen name="Main" component={MainNavigator} />
       </RootStack.Navigator>
     </NavigationContainer>
   );
 };
 
+// Helper functions for AsyncStorage
+export const storeData = async (key: string, value: any) => {
+  try {
+    await AsyncStorage.setItem(key, JSON.stringify(value));
+  } catch (e) {
+    console.error('Error storing data', e);
+  }
+};
+
+export const getData = async (key: string) => {
+  try {
+    const value = await AsyncStorage.getItem(key);
+    return value ? JSON.parse(value) : null;
+  } catch (e) {
+    console.error('Error reading data', e);
+    return null;
+  }
+};
+
 // Main App component
 export default function App() {
+  useEffect(() => {
+    const initSampleData = async () => {
+      const hasData = await getData('initialized');
+      if (!hasData) {
+        await storeData('timeEntries', [
+          { id: '1', project: 'Project Alpha', start: '2023-10-18T09:00', end: '2023-10-18T10:30' }
+        ]);
+        await storeData('initialized', true);
+      }
+    };
+    initSampleData();
+  }, []);
+
   return (
-    <AuthProvider>
-      <AppContent />
-    </AuthProvider>
+    <AppContent />
   );
 }
 

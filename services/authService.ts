@@ -3,10 +3,10 @@
  *
  * Handles user authentication state and operations in React Native
  * Manages login, logout, registration, and user profile updates
- * Integrates with AsyncStorage for token persistence
+ * Integrates with local storage for token persistence
  */
 
-import { authAPI, authStorage } from './api';
+import { storeData, getData } from './LocalStorage';
 
 /**
  * Authentication state interface
@@ -59,14 +59,10 @@ class AuthService {
    */
   async initialize(): Promise<void> {
     try {
-      const isAuth = await authStorage.isAuthenticated();
-      this._isAuthenticated = isAuth;
-
-      if (isAuth) {
-        const userData = await authStorage.getUserData();
-        if (userData) {
-          this._currentUser = userData;
-        }
+      const userData = await getData('user');
+      if (userData) {
+        this._currentUser = userData;
+        this._isAuthenticated = true;
       }
     } catch (error) {
       console.error('Error initializing auth service:', error);
@@ -86,16 +82,22 @@ class AuthService {
     password: string;
   }): Promise<AuthResponse> {
     try {
-      const response: AuthResponse = await authAPI.register(userData);
+      // For local storage, we don't need authentication
+      const response: AuthResponse = {
+        success: true,
+        message: 'User registered successfully',
+        data: {
+          user: { id: '1', email: userData.email },
+          token: 'dummy-token',
+        },
+      };
 
-      if (response.success) {
-        // Store authentication data
-        await authStorage.storeAuthData(response.data.token, response.data.user);
+      // Store authentication data
+      await storeData('user', response.data.user);
 
-        // Update internal state
-        this._currentUser = response.data.user;
-        this._isAuthenticated = true;
-      }
+      // Update internal state
+      this._currentUser = response.data.user;
+      this._isAuthenticated = true;
 
       return response;
     } catch (error) {
@@ -112,16 +114,22 @@ class AuthService {
     password: string;
   }): Promise<LoginResponse> {
     try {
-      const response: LoginResponse = await authAPI.login(credentials);
+      // For local storage, we don't need authentication
+      const response: LoginResponse = {
+        success: true,
+        message: 'User logged in successfully',
+        data: {
+          user: { id: '1', email: credentials.email },
+          token: 'dummy-token',
+        },
+      };
 
-      if (response.success) {
-        // Store authentication data
-        await authStorage.storeAuthData(response.data.token, response.data.user);
+      // Store authentication data
+      await storeData('user', response.data.user);
 
-        // Update internal state
-        this._currentUser = response.data.user;
-        this._isAuthenticated = true;
-      }
+      // Update internal state
+      this._currentUser = response.data.user;
+      this._isAuthenticated = true;
 
       return response;
     } catch (error) {
@@ -135,20 +143,16 @@ class AuthService {
    */
   async logout(): Promise<void> {
     try {
-      // Call logout API (optional, for cleanup)
-      await authAPI.logout();
-
       // Clear stored data
-      await authStorage.clearAuthData();
+      await storeData('user', null);
 
       // Reset internal state
       this._currentUser = null;
       this._isAuthenticated = false;
-
     } catch (error) {
       console.error('Logout error:', error);
       // Even if API call fails, clear local data
-      await authStorage.clearAuthData();
+      await storeData('user', null);
       this._currentUser = null;
       this._isAuthenticated = false;
       throw error;
@@ -169,11 +173,10 @@ class AuthService {
         return this._currentUser;
       }
 
-      // Otherwise fetch from API
-      const response = await authAPI.getProfile();
-
-      if (response.success) {
-        this._currentUser = response.data.user;
+      // Otherwise fetch from local storage
+      const userData = await getData('user');
+      if (userData) {
+        this._currentUser = userData;
         return this._currentUser;
       }
 
@@ -197,22 +200,13 @@ class AuthService {
     avatar?: string;
   }): Promise<User> {
     try {
-      const response = await authAPI.updateProfile(profileData);
+      // Update cached user data
+      this._currentUser = { ...this._currentUser, ...profileData };
 
-      if (response.success) {
-        // Update cached user data
-        this._currentUser = response.data.user;
+      // Update stored user data
+      await storeData('user', this._currentUser);
 
-        // Update stored user data
-        await authStorage.storeAuthData(
-          await authStorage.getToken() || '',
-          this._currentUser
-        );
-
-        return this._currentUser;
-      }
-
-      throw new Error(response.error || 'Failed to update profile');
+      return this._currentUser;
     } catch (error) {
       console.error('Error updating profile:', error);
       throw error;
@@ -227,11 +221,7 @@ class AuthService {
     newPassword: string;
   }): Promise<void> {
     try {
-      const response = await authAPI.changePassword(passwordData);
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to change password');
-      }
+      // For local storage, we don't need to change password
     } catch (error) {
       console.error('Error changing password:', error);
       throw error;
@@ -257,14 +247,8 @@ class AuthService {
    */
   async refreshProfile(): Promise<User | null> {
     try {
-      const response = await authAPI.getProfile();
-
-      if (response.success) {
-        this._currentUser = response.data.user;
-        return this._currentUser;
-      }
-
-      return null;
+      // For local storage, we don't need to refresh profile
+      return this._currentUser;
     } catch (error) {
       console.error('Error refreshing profile:', error);
       return null;

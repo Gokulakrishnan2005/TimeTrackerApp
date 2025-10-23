@@ -2,11 +2,11 @@
  * Task Service
  *
  * Handles daily tasks, habits, and goals management
- * Integrates with backend API for task and goal operations
+ * Integrates with local storage for task and goal operations
  * Provides React-friendly interfaces for task tracking
  */
 
-import { taskAPI } from './api';
+import { storeData, getData } from './LocalStorage';
 
 /**
  * Habit interface
@@ -73,13 +73,10 @@ class TaskService {
     icon?: string;
   }): Promise<Habit> {
     try {
-      const response = await taskAPI.createHabit(habitData);
-
-      if (response.success) {
-        return response.data.habit;
-      }
-
-      throw new Error(response.error || 'Failed to create habit');
+      const habits = await getData('habits') || [];
+      const newHabit = { ...habitData, id: Date.now().toString(), userId: 'local', currentStreak: 0, longestStreak: 0, completedDates: [], isCompletedToday: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      await storeData('habits', [...habits, newHabit]);
+      return newHabit;
     } catch (error) {
       console.error('Error creating habit:', error);
       throw error;
@@ -91,13 +88,7 @@ class TaskService {
    */
   async getHabits(): Promise<Habit[]> {
     try {
-      const response = await taskAPI.getHabits();
-
-      if (response.success) {
-        return response.data.habits;
-      }
-
-      throw new Error(response.error || 'Failed to fetch habits');
+      return await getData('habits') || [];
     } catch (error) {
       console.error('Error fetching habits:', error);
       throw error;
@@ -109,13 +100,16 @@ class TaskService {
    */
   async completeHabit(habitId: string): Promise<Habit> {
     try {
-      const response = await taskAPI.completeHabit(habitId);
-
-      if (response.success) {
-        return response.data.habit;
+      const habits = await getData('habits') || [];
+      const index = habits.findIndex(habit => habit.id === habitId);
+      if (index !== -1) {
+        habits[index].isCompletedToday = true;
+        habits[index].completedDates.push(new Date().toISOString());
+        habits[index].currentStreak++;
+        await storeData('habits', habits);
+        return habits[index];
       }
-
-      throw new Error(response.error || 'Failed to complete habit');
+      throw new Error('Habit not found');
     } catch (error) {
       console.error('Error completing habit:', error);
       throw error;
@@ -127,11 +121,9 @@ class TaskService {
    */
   async deleteHabit(habitId: string): Promise<void> {
     try {
-      const response = await taskAPI.deleteHabit(habitId);
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete habit');
-      }
+      const habits = await getData('habits') || [];
+      const filtered = habits.filter(habit => habit.id !== habitId);
+      await storeData('habits', filtered);
     } catch (error) {
       console.error('Error deleting habit:', error);
       throw error;
@@ -147,13 +139,10 @@ class TaskService {
     date?: string;
   }): Promise<DailyTask> {
     try {
-      const response = await taskAPI.createDailyTask(taskData);
-
-      if (response.success) {
-        return response.data.task;
-      }
-
-      throw new Error(response.error || 'Failed to create daily task');
+      const tasks = await getData('tasks') || [];
+      const newTask = { ...taskData, id: Date.now().toString(), userId: 'local', isCompleted: false, completedAt: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      await storeData('tasks', [...tasks, newTask]);
+      return newTask;
     } catch (error) {
       console.error('Error creating daily task:', error);
       throw error;
@@ -165,13 +154,11 @@ class TaskService {
    */
   async getDailyTasks(date?: string): Promise<DailyTask[]> {
     try {
-      const response = await taskAPI.getDailyTasks(date);
-
-      if (response.success) {
-        return response.data.tasks;
+      const tasks = await getData('tasks') || [];
+      if (date) {
+        return tasks.filter(task => task.date === date);
       }
-
-      throw new Error(response.error || 'Failed to fetch daily tasks');
+      return tasks;
     } catch (error) {
       console.error('Error fetching daily tasks:', error);
       throw error;
@@ -183,13 +170,19 @@ class TaskService {
    */
   async toggleTaskCompletion(taskId: string): Promise<DailyTask> {
     try {
-      const response = await taskAPI.toggleTask(taskId);
-
-      if (response.success) {
-        return response.data.task;
+      const tasks = await getData('tasks') || [];
+      const index = tasks.findIndex(task => task.id === taskId);
+      if (index !== -1) {
+        tasks[index].isCompleted = !tasks[index].isCompleted;
+        if (tasks[index].isCompleted) {
+          tasks[index].completedAt = new Date().toISOString();
+        } else {
+          tasks[index].completedAt = null;
+        }
+        await storeData('tasks', tasks);
+        return tasks[index];
       }
-
-      throw new Error(response.error || 'Failed to toggle task completion');
+      throw new Error('Task not found');
     } catch (error) {
       console.error('Error toggling task completion:', error);
       throw error;
@@ -201,11 +194,9 @@ class TaskService {
    */
   async deleteDailyTask(taskId: string): Promise<void> {
     try {
-      const response = await taskAPI.deleteDailyTask(taskId);
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete daily task');
-      }
+      const tasks = await getData('tasks') || [];
+      const filtered = tasks.filter(task => task.id !== taskId);
+      await storeData('tasks', filtered);
     } catch (error) {
       console.error('Error deleting daily task:', error);
       throw error;
@@ -225,13 +216,10 @@ class TaskService {
     endDate: string;
   }): Promise<Goal> {
     try {
-      const response = await taskAPI.createGoal(goalData);
-
-      if (response.success) {
-        return response.data.goal;
-      }
-
-      throw new Error(response.error || 'Failed to create goal');
+      const goals = await getData('goals') || [];
+      const newGoal = { ...goalData, id: Date.now().toString(), userId: 'local', currentValue: 0, progress: 0, isCompleted: false, imageUrl: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+      await storeData('goals', [...goals, newGoal]);
+      return newGoal;
     } catch (error) {
       console.error('Error creating goal:', error);
       throw error;
@@ -243,13 +231,11 @@ class TaskService {
    */
   async getGoals(type?: string): Promise<Goal[]> {
     try {
-      const response = await taskAPI.getGoals(type);
-
-      if (response.success) {
-        return response.data.goals;
+      const goals = await getData('goals') || [];
+      if (type) {
+        return goals.filter(goal => goal.type === type);
       }
-
-      throw new Error(response.error || 'Failed to fetch goals');
+      return goals;
     } catch (error) {
       console.error('Error fetching goals:', error);
       throw error;
@@ -261,13 +247,15 @@ class TaskService {
    */
   async updateGoalProgress(goalId: string, increment: number): Promise<Goal> {
     try {
-      const response = await taskAPI.updateGoalProgress(goalId, increment);
-
-      if (response.success) {
-        return response.data.goal;
+      const goals = await getData('goals') || [];
+      const index = goals.findIndex(goal => goal.id === goalId);
+      if (index !== -1) {
+        goals[index].currentValue += increment;
+        goals[index].progress = Math.min(100, (goals[index].currentValue / goals[index].targetValue) * 100);
+        await storeData('goals', goals);
+        return goals[index];
       }
-
-      throw new Error(response.error || 'Failed to update goal progress');
+      throw new Error('Goal not found');
     } catch (error) {
       console.error('Error updating goal progress:', error);
       throw error;
@@ -279,11 +267,9 @@ class TaskService {
    */
   async deleteGoal(goalId: string): Promise<void> {
     try {
-      const response = await taskAPI.deleteGoal(goalId);
-
-      if (!response.success) {
-        throw new Error(response.error || 'Failed to delete goal');
-      }
+      const goals = await getData('goals') || [];
+      const filtered = goals.filter(goal => goal.id !== goalId);
+      await storeData('goals', filtered);
     } catch (error) {
       console.error('Error deleting goal:', error);
       throw error;
@@ -295,13 +281,7 @@ class TaskService {
    */
   async getVisionBoard(): Promise<Goal[]> {
     try {
-      const response = await taskAPI.getVisionBoard();
-
-      if (response.success) {
-        return response.data.visionBoard;
-      }
-
-      throw new Error(response.error || 'Failed to fetch vision board');
+      return await getData('goals') || [];
     } catch (error) {
       console.error('Error fetching vision board:', error);
       throw error;
@@ -313,13 +293,14 @@ class TaskService {
    */
   async addVisionImage(goalId: string, imageUrl: string): Promise<Goal> {
     try {
-      const response = await taskAPI.addVisionImage(goalId, imageUrl);
-
-      if (response.success) {
-        return response.data.goal;
+      const goals = await getData('goals') || [];
+      const index = goals.findIndex(goal => goal.id === goalId);
+      if (index !== -1) {
+        goals[index].imageUrl = imageUrl;
+        await storeData('goals', goals);
+        return goals[index];
       }
-
-      throw new Error(response.error || 'Failed to add vision image');
+      throw new Error('Goal not found');
     } catch (error) {
       console.error('Error adding vision image:', error);
       throw error;

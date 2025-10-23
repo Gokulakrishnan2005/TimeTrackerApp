@@ -18,9 +18,9 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../constants/colors';
 import { spacing, typography, radii } from '../constants/theme';
+import { storeData } from '../services/LocalStorage';
 
 export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [formData, setFormData] = useState({
@@ -33,8 +33,6 @@ export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-
-  const { register } = useAuth();
 
   const updateField = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -70,13 +68,25 @@ export const SignupScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
     setIsLoading(true);
     try {
-      await register({
+      const profile = {
         name: formData.name.trim(),
-        username: formData.username.toLowerCase().trim(),
         email: formData.email.toLowerCase().trim(),
-        password: formData.password,
-      });
-      // Navigation will be handled by AuthContext
+        username: formData.username.toLowerCase().trim(),
+        createdAt: new Date().toISOString(),
+      };
+
+      await storeData('profile_data', profile);
+
+      Alert.alert(
+        'Account Ready',
+        'Your profile has been stored locally. You can personalize your experience offline.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => navigation.goBack(),
+          },
+        ],
+      );
     } catch (error: any) {
       Alert.alert(
         'Registration Failed',

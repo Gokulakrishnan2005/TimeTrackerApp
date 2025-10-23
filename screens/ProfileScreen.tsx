@@ -12,36 +12,76 @@ import {
 } from "react-native";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
-import ConnectionTest from "../components/ConnectionTest";
-import { useAuth } from "../contexts/AuthContext";
-import { useNavigation } from "@react-navigation/native";
+import { storeData, getData } from "../services/LocalStorage";
+import { exportAppDataToCsv, importAppDataFromCsv } from "../services/dataTransferService";
+
+interface LocalProfile {
+  name: string;
+  email: string;
+  avatar?: string;
+  createdAt?: string;
+}
+
+const PROFILE_STORAGE_KEY = "profile_data";
 
 export const ProfileScreen: FC = () => {
-  const { user, logout, updateProfile } = useAuth();
-  const navigation = useNavigation<any>();
-  const [showConnectionTest, setShowConnectionTest] = React.useState(false);
   const [isEditing, setIsEditing] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [profile, setProfile] = React.useState<LocalProfile>({
+    name: "Guest",
+    email: "",
+    createdAt: new Date().toISOString(),
+  });
+  const [formName, setFormName] = React.useState("Guest");
+  const [formEmail, setFormEmail] = React.useState("");
 
-  const rawName = user?.name ?? "";
+  React.useEffect(() => {
+    const loadProfile = async () => {
+      const saved = await getData(PROFILE_STORAGE_KEY);
+      if (saved) {
+        setProfile({
+          name: saved.name ?? "Guest",
+          email: saved.email ?? "",
+          avatar: saved.avatar,
+          createdAt: saved.createdAt ?? new Date().toISOString(),
+        });
+      } else {
+        const initialProfile: LocalProfile = {
+          name: "Guest",
+          email: "",
+          createdAt: new Date().toISOString(),
+        };
+        await storeData(PROFILE_STORAGE_KEY, initialProfile);
+        setProfile(initialProfile);
+      }
+    };
+    loadProfile();
+  }, []);
+
+  React.useEffect(() => {
+    if (!isEditing) {
+      setFormName(profile.name ?? "");
+      setFormEmail(profile.email ?? "");
+    }
+  }, [profile, isEditing]);
+
+  const rawName = profile.name ?? "";
   const displayName = rawName.trim() ? rawName : "Guest";
-  const displayEmail = user?.email ?? "";
-  const [formName, setFormName] = React.useState(rawName);
-  const [formEmail, setFormEmail] = React.useState(displayEmail);
+  const displayEmail = profile.email ?? "";
 
   const joinedLabel = useMemo(() => {
-    if (!user?.createdAt) {
+    if (!profile.createdAt) {
       return "Member";
     }
     try {
-      return new Date(user.createdAt).toLocaleDateString(undefined, {
+      return new Date(profile.createdAt).toLocaleDateString(undefined, {
         month: "short",
         year: "numeric",
       });
     } catch (error) {
       return "Member";
     }
-  }, [user?.createdAt]);
+  }, [profile.createdAt]);
 
   React.useEffect(() => {
     if (!isEditing) {
@@ -52,14 +92,6 @@ export const ProfileScreen: FC = () => {
 
   const isDirty = formName.trim() !== rawName.trim() || formEmail.trim() !== displayEmail.trim();
   const canSave = isDirty && !isSaving;
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error: any) {
-      Alert.alert("Logout Failed", error?.message ?? "Please try again.");
-    }
-  };
 
   const handleEditProfile = () => {
     setIsEditing(true);
@@ -90,7 +122,13 @@ export const ProfileScreen: FC = () => {
 
     try {
       setIsSaving(true);
-      await updateProfile({ name: nextName, email: nextEmail });
+      const nextProfile: LocalProfile = {
+        ...profile,
+        name: nextName,
+        email: nextEmail,
+      };
+      setProfile(nextProfile);
+      await storeData(PROFILE_STORAGE_KEY, nextProfile);
       Alert.alert("Profile Updated", "Your profile details have been saved.");
       setIsEditing(false);
     } catch (error: any) {
@@ -101,23 +139,67 @@ export const ProfileScreen: FC = () => {
   };
 
   const handleChangePassword = () => {
-    navigation.navigate("ProfileChangePassword");
+    Alert.alert(
+      "Coming Soon",
+      "Password changes will be available in a future update."
+    );
   };
 
   const handleOpenNotifications = () => {
-    navigation.navigate("ProfileNotifications");
+    Alert.alert(
+      "Notifications",
+      "Configure reminders in your device settings for now. In-app scheduling is planned."
+    );
   };
 
   const goToIncomeExpenseHistory = () => {
-    navigation.navigate("ProfileSpendingHistory");
+    Alert.alert(
+      "Spending History",
+      "View your income and expense details from the Finance tab."
+    );
+  };
+
+  const handleExportData = async () => {
+    try {
+      const result = await exportAppDataToCsv();
+      if (result.savedLocally) {
+        Alert.alert(
+          "Export Complete",
+          `Backup saved to local app storage as ${result.fileName}. Use Import Data to restore.`
+        );
+      } else {
+        Alert.alert(
+          "Export Complete",
+          "Backup saved to your selected folder. Keep it safe for future imports."
+        );
+      }
+    } catch (error: any) {
+      Alert.alert("Export Failed", error?.message ?? "Please try again.");
+    }
+  };
+
+  const handleImportData = async () => {
+    try {
+      const imported = await importAppDataFromCsv();
+      if (imported.profile) {
+        setProfile(imported.profile);
+        await storeData(PROFILE_STORAGE_KEY, imported.profile);
+      }
+      Alert.alert(
+        "Import Complete",
+        `Restored ${imported.sessionsImported} sessions and ${imported.transactionsImported} transactions.`
+      );
+    } catch (error: any) {
+      Alert.alert("Import Failed", error?.message ?? "Please try again.");
+    }
   };
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
       <View style={styles.headerCard}>
         <View style={styles.avatarWrapper}>
-          {user?.avatar ? (
-            <Image source={{ uri: user.avatar }} style={styles.avatarImage} />
+          {profile.avatar ? (
+            <Image source={{ uri: profile.avatar }} style={styles.avatarImage} />
           ) : (
             <View style={styles.avatarPlaceholder}>
               <Text style={styles.avatarInitial}>{displayName.charAt(0).toUpperCase()}</Text>
@@ -208,11 +290,12 @@ export const ProfileScreen: FC = () => {
           <Text style={styles.menuText}>Notifications</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => setShowConnectionTest(true)}
-        >
-          <Text style={styles.menuText}>Test Connection</Text>
+        <TouchableOpacity style={styles.menuItem} onPress={handleExportData}>
+          <Text style={styles.menuText}>Export Data (CSV)</Text>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={handleImportData}>
+          <Text style={styles.menuText}>Import Data (CSV)</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={goToIncomeExpenseHistory}>
@@ -234,25 +317,6 @@ export const ProfileScreen: FC = () => {
           <Text style={styles.menuValue}>0.1.2(alpha)</Text>
         </View>
       </View>
-
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
-
-      {/* Connection Test Modal */}
-      {showConnectionTest && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.modal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Connection Test</Text>
-              <TouchableOpacity onPress={() => setShowConnectionTest(false)}>
-                <Text style={styles.modalClose}>✕</Text>
-              </TouchableOpacity>
-            </View>
-            <ConnectionTest />
-          </View>
-        </View>
-      )}
     </ScrollView>
   );
 };
@@ -438,50 +502,6 @@ const styles = StyleSheet.create({
   },
   aboutCopy: {
     ...typography.body,
-    color: colors.textSecondary,
-  },
-  logoutButton: {
-    backgroundColor: '#34D399',
-    borderRadius: radii.xl,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  logoutText: {
-    ...typography.heading,
-    color: colors.surface,
-    fontWeight: '700',
-  },
-  modalOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(15, 23, 42, 0.55)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modal: {
-    backgroundColor: colors.surface,
-    borderRadius: radii.xl,
-    width: '90%',
-    maxHeight: '80%',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: spacing.xl,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.borderLight,
-  },
-  modalTitle: {
-    ...typography.heading,
-    color: colors.textPrimary,
-  },
-  modalClose: {
-    fontSize: 24,
     color: colors.textSecondary,
   },
 });

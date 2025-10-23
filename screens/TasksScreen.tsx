@@ -12,7 +12,6 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AddTaskModal from '../components/AddTaskModal';
-import { useAuth } from '../contexts/AuthContext';
 import { taskService } from '../services/taskService';
 import { colors } from '../constants/colors';
 import { spacing, typography, radii } from '../constants/theme';
@@ -48,7 +47,6 @@ interface Goal {
 }
 
 const TasksScreen: React.FC = () => {
-  const { user } = useAuth();
   const [habits, setHabits] = useState<Habit[]>([]);
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);

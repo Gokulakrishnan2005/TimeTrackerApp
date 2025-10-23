@@ -1,5 +1,4 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { TimeEntry } from "./timeEntry";
+import { storeData, getData } from './LocalStorage';
 
 const STORAGE_KEY = "timeEntries";
 
@@ -21,7 +20,7 @@ const deserialize = (entry: PersistedTimeEntry): TimeEntry => ({
 });
 
 export async function loadTimeEntries(): Promise<TimeEntry[]> {
-  const stored = await AsyncStorage.getItem(STORAGE_KEY);
+  const stored = await getData(STORAGE_KEY);
   if (!stored) {
     return [];
   }
@@ -31,7 +30,7 @@ export async function loadTimeEntries(): Promise<TimeEntry[]> {
 
 export async function saveTimeEntries(entries: TimeEntry[]): Promise<void> {
   const serialized = entries.map(serialize);
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
+  await storeData(STORAGE_KEY, JSON.stringify(serialized));
 }
 
 export async function addTimeEntry(entry: TimeEntry): Promise<TimeEntry[]> {
@@ -58,5 +57,5 @@ export async function removeTimeEntry(id: string): Promise<TimeEntry[]> {
 }
 
 export async function clearTimeEntries(): Promise<void> {
-  await AsyncStorage.removeItem(STORAGE_KEY);
+  await storeData(STORAGE_KEY, '[]');
 }

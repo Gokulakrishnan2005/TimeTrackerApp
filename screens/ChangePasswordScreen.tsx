@@ -10,7 +10,7 @@ import {
   ScrollView,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { useAuth } from "../contexts/AuthContext";
+import { storeData } from "../services/LocalStorage";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
 
@@ -18,7 +18,6 @@ const PASSWORD_MIN_LENGTH = 8;
 
 const ChangePasswordScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const { updatePassword } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -56,7 +55,10 @@ const ChangePasswordScreen: React.FC = () => {
 
     try {
       setIsSubmitting(true);
-      await updatePassword({ currentPassword, newPassword });
+      await storeData("profile_password", {
+        value: newPassword,
+        updatedAt: new Date().toISOString(),
+      });
       Alert.alert("Success", "Your password has been updated.", [
         {
           text: "OK",

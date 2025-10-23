@@ -22,8 +22,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { PieChart, LineChart } from 'react-native-chart-kit';
 import { useIsFocused } from '@react-navigation/native';
 import AddTransactionModal from '../components/AddTransactionModal';
-import { useAuth } from '../contexts/AuthContext';
-import { financeService, MonthlyTrend } from '../services/financeService';
+import { financeService, MonthlyTrend, TrendPoint } from '../services/financeService';
 import { colors } from '../constants/colors';
 import { spacing, typography, radii } from '../constants/theme';
 
@@ -54,11 +53,11 @@ type ChartSlice = {
 };
 
 const FinanceScreen: React.FC = () => {
-  const { user } = useAuth();
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [expenseBreakdown, setExpenseBreakdown] = useState<CategoryBreakdown[]>([]);
   const [incomeBreakdown, setIncomeBreakdown] = useState<CategoryBreakdown[]>([]);
   const [trends, setTrends] = useState<MonthlyTrend[]>([]);
+  const [trendSeries, setTrendSeries] = useState<TrendPoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -149,6 +148,7 @@ const FinanceScreen: React.FC = () => {
       let expenseData: CategoryBreakdown[] = [];
       let incomeData: CategoryBreakdown[] = [];
       let trendData: MonthlyTrend[] = [];
+      let trendSeriesData: TrendPoint[] = [];
       let currSummary: FinanceSummary = summary || { income: 0, expenses: 0, savings: 0, savingsRate: '0' };
       let incDelta = incomeChange;
       let expDelta = expenseChange;
@@ -158,6 +158,7 @@ const FinanceScreen: React.FC = () => {
       if (timePeriod === 'month') {
         const stats = await financeService.getStats(6);
         trendData = stats.trends || [];
+        trendSeriesData = await financeService.getTrendSeries('month', 6);
         currSummary = stats.currentMonth.summary;
         expenseData = stats.currentMonth.expenseBreakdown;
         incomeData = stats.currentMonth.incomeBreakdown;
@@ -176,13 +177,14 @@ const FinanceScreen: React.FC = () => {
         }
       } else {
         // Non-month periods: parallelize requests
-        const [current, previous, [expRes, incRes, trRes]] = await Promise.all([
+        const [current, previous, [expRes, incRes, trRes, seriesData]] = await Promise.all([
           financeService.getSummary(range),
           financeService.getSummary(prevRange),
           Promise.all([
             financeService.getExpenseBreakdown(range),
             financeService.getIncomeBreakdown(range),
             financeService.getTrends(6),
+            financeService.getTrendSeries(timePeriod, timePeriod === 'day' ? 7 : timePeriod === 'year' ? 5 : 6),
           ]),
         ]);
 
@@ -193,6 +195,7 @@ const FinanceScreen: React.FC = () => {
         expenseData = expRes;
         incomeData = incRes;
         trendData = trRes;
+        trendSeriesData = seriesData;
       }
 
       // Update state once with computed values
@@ -203,6 +206,7 @@ const FinanceScreen: React.FC = () => {
       setExpenseBreakdown(expenseData);
       setIncomeBreakdown(incomeData);
       setTrends(trendData);
+      setTrendSeries(trendSeriesData);
 
       // Cache the latest dataset to keep UI after refresh
       await AsyncStorage.setItem('finance_cache', JSON.stringify({
@@ -308,6 +312,8 @@ const FinanceScreen: React.FC = () => {
     );
   }
 
+  const last6 = trends.slice(-6);
+
   // Chart data builders
   const incomeColors = ['#5B9AA8', '#7FB7A7', '#A3C9A5', '#77C3B1', '#4ECDC4'];
   const expenseColors = ['#C87272', '#D8847B', '#E89684', '#BC5E5E', '#A85050'];
@@ -372,16 +378,46 @@ const FinanceScreen: React.FC = () => {
   const incomeChartData = incomePie.slices;
   const expenseChartData = expensePie.slices;
 
-  const last6 = trends.slice(-6);
-  const labels = last6.map(t => ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'][t.month - 1] || '');
-  const expensesTrendData = {
-    labels,
-    datasets: [{ data: last6.map(t => t.expenses), color: (o: number = 1) => `rgba(239, 68, 68, ${o})`, strokeWidth: 3 }],
+  const buildTrendChart = (type: 'income' | 'expenses') => {
+    const series = trendSeries.length ? trendSeries : trends.slice(-6).map((t) => ({
+      startDate: new Date(t.year, t.month - 1, 1).toISOString(),
+      endDate: new Date(t.year, t.month - 1, 28).toISOString(),
+      income: t.income,
+      expenses: t.expenses,
+      savings: t.savings,
+    }));
+
+    const labels = series.map((point) => {
+      const start = new Date(point.startDate);
+      if (timePeriod === 'day') {
+        return start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+      }
+      if (timePeriod === 'year') {
+        return start.getFullYear().toString();
+      }
+      return start.toLocaleDateString(undefined, { month: 'short' });
+    });
+
+    const dataValues = series.map((point) => (type === 'income' ? point.income : point.expenses));
+
+    const color = type === 'income'
+      ? (opacity: number = 1) => `rgba(16, 185, 129, ${opacity})`
+      : (opacity: number = 1) => `rgba(239, 68, 68, ${opacity})`;
+
+    return {
+      labels,
+      datasets: [
+        {
+          data: dataValues,
+          color,
+          strokeWidth: 3,
+        },
+      ],
+    };
   };
-  const incomeTrendData = {
-    labels,
-    datasets: [{ data: last6.map(t => t.income), color: (o: number = 1) => `rgba(16, 185, 129, ${o})`, strokeWidth: 3 }],
-  };
+
+  const expensesTrendData = buildTrendChart('expenses');
+  const incomeTrendData = buildTrendChart('income');
 
   const chartConfig = {
     backgroundColor: '#ffffff',
@@ -565,7 +601,7 @@ const FinanceScreen: React.FC = () => {
               </View>
             </View>
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyText}>No income data</Text></View>
+            <View style={styles.emptyChart}><Text style={styles.emptyChartText}>No income data</Text></View>
           )}
         </View>
 
@@ -636,7 +672,7 @@ const FinanceScreen: React.FC = () => {
               </View>
             </View>
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyText}>No expense data</Text></View>
+            <View style={styles.emptyChart}><Text style={styles.emptyChartText}>No expense data</Text></View>
           )}
         </View>
 
@@ -656,19 +692,22 @@ const FinanceScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-          {last6.length > 0 ? (
+          {expensesTrendData.datasets[0].data.length > 0 ? (
             <LineChart
               data={expensesTrendData}
               width={chartWidth}
               height={Math.max(chartHeight, 200)}
               chartConfig={chartConfig}
               bezier
-              withInnerLines
-              withOuterLines
-              style={StyleSheet.flatten([styles.chart, { width: chartWidth }])}
+              withDots={false}
+              withShadow={false}
+              withInnerLines={false}
+              style={styles.chart}
             />
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyText}>No expense trend data</Text></View>
+            <View style={styles.emptyChart}>
+              <Text style={styles.emptyChartText}>No expense data for this period</Text>
+            </View>
           )}
         </View>
 
@@ -688,19 +727,22 @@ const FinanceScreen: React.FC = () => {
               </TouchableOpacity>
             </View>
           </View>
-          {last6.length > 0 ? (
+          {incomeTrendData.datasets[0].data.length > 0 ? (
             <LineChart
               data={incomeTrendData}
               width={chartWidth}
               height={Math.max(chartHeight, 200)}
               chartConfig={chartConfig}
               bezier
-              withInnerLines
-              withOuterLines
-              style={StyleSheet.flatten([styles.chart, { width: chartWidth }])}
+              withDots={false}
+              withShadow={false}
+              withInnerLines={false}
+              style={styles.chart}
             />
           ) : (
-            <View style={styles.emptyChart}><Text style={styles.emptyText}>No income trend data</Text></View>
+            <View style={styles.emptyChart}>
+              <Text style={styles.emptyChartText}>No income data for this period</Text>
+            </View>
           )}
         </View>
         </View>
@@ -891,9 +933,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   chart: {
-    marginVertical: spacing.sm,
+    marginTop: spacing.md,
     borderRadius: radii.md,
-    paddingRight: 0,
   },
   chartContainer: {
     alignItems: 'stretch',
@@ -940,19 +981,17 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     flexWrap: 'wrap',
   },
-  emptyChart: { 
-    height: 160, 
-    backgroundColor: colors.background, 
-    borderRadius: radii.lg, 
-    alignItems: 'center', 
+  emptyChart: {
+    height: 160,
     justifyContent: 'center',
-    marginTop: spacing.sm,
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    marginTop: spacing.md,
   },
-  emptyText: { 
-    fontSize: 14,
-    color: colors.textTertiary,
-    textAlign: 'center',
-    padding: spacing.md,
+  emptyChartText: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   categoryToggle: { flexDirection: 'row', gap: spacing.sm },
   categoryToggleCompact: { gap: spacing.xs },

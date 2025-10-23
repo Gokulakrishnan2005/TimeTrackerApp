@@ -18,17 +18,17 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { useAuth } from '../contexts/AuthContext';
 import { colors } from '../constants/colors';
 import { spacing, typography, radii } from '../constants/theme';
+import { storeData, getData } from '../services/LocalStorage';
+
+const PROFILE_STORAGE_KEY = 'profile_data';
 
 export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-
-  const { login } = useAuth();
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -38,12 +38,35 @@ export const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      // Navigation will be handled by AuthContext
+      const normalizedEmail = email.trim().toLowerCase();
+      const existingProfile = await getData(PROFILE_STORAGE_KEY);
+      const updatedProfile = {
+        name: existingProfile?.name ?? 'Guest',
+        email: normalizedEmail,
+        avatar: existingProfile?.avatar,
+        createdAt: existingProfile?.createdAt ?? new Date().toISOString(),
+      };
+
+      await storeData(PROFILE_STORAGE_KEY, updatedProfile);
+
+      Alert.alert(
+        'Offline Mode',
+        'Your login details have been saved locally for personalization.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (navigation && typeof navigation.goBack === 'function') {
+                navigation.goBack();
+              }
+            },
+          },
+        ],
+      );
     } catch (error: any) {
       Alert.alert(
         'Login Failed',
-        error.message || 'Please check your credentials and try again'
+        error?.message || 'Unable to store your details locally. Please try again.'
       );
     } finally {
       setIsLoading(false);

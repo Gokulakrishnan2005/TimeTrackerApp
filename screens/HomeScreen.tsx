@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   AppState,
   AppStateStatus,
@@ -87,11 +86,7 @@ export const HomeScreen = () => {
           getAllSessions(),
         ]);
         setActiveSession(session);
-        const sortedSessions = [...storedSessions].sort(
-          (a, b) =>
-            new Date(b.startDateTime).getTime() - new Date(a.startDateTime).getTime()
-        );
-        setSessions(sortedSessions);
+        setSessions(storedSessions);
       } catch (error) {
         handleError(error, "We couldn't refresh your sessions.");
       } finally {

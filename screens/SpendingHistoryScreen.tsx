@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -12,156 +12,71 @@ import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
 import financeService, { Transaction } from "../services/financeService";
 
-const PAGE_SIZE = 20;
-const CACHE_TTL = 60 * 1000; // 60 seconds
-
 type FilterType = "all" | "income" | "expense";
 
-type CacheEntry = {
-  transactions: Transaction[];
-  page: number;
-  hasMore: boolean;
-  lastFetched: number;
-};
-
 const SpendingHistoryScreen: React.FC = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [visibleTransactions, setVisibleTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<number>(1);
-  const [hasMore, setHasMore] = useState<boolean>(true);
-  const [isFetchingMore, setIsFetchingMore] = useState<boolean>(false);
 
-  const cacheRef = useRef<Record<FilterType, CacheEntry>>({
-    all: { transactions: [], page: 1, hasMore: true, lastFetched: 0 },
-    income: { transactions: [], page: 1, hasMore: true, lastFetched: 0 },
-    expense: { transactions: [], page: 1, hasMore: true, lastFetched: 0 },
-  });
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-  const loadingMapRef = useRef<Record<FilterType, boolean>>({ all: false, income: false, expense: false });
+  const totals = useMemo(() => {
+    const income = visibleTransactions
+      .filter((tx) => tx.type === "income")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    const expense = visibleTransactions
+      .filter((tx) => tx.type === "expense")
+      .reduce((sum, tx) => sum + tx.amount, 0);
+    return { income, expense };
+  }, [visibleTransactions]);
 
-  const loadTransactions = useCallback(
-    async (opts?: { reset?: boolean; pageOverride?: number; filterOverride?: FilterType }) => {
-      const reset = opts?.reset ?? false;
-      const activeFilter = opts?.filterOverride ?? filter;
-      const cache = cacheRef.current[activeFilter];
-      const targetPage = reset ? 1 : opts?.pageOverride ?? cache.page ?? 1;
-
-      if (loadingMapRef.current[activeFilter]) {
-        return;
+  const computeVisible = useCallback(
+    (base: Transaction[], nextFilter: FilterType) => {
+      if (nextFilter === "income") {
+        return base.filter((tx) => tx.type === "income");
       }
-      loadingMapRef.current[activeFilter] = true;
-
-      try {
-        if (reset && filter === activeFilter) {
-          setError(null);
-        }
-        const response = await financeService.getTransactions({
-          page: targetPage,
-          limit: PAGE_SIZE,
-          type: activeFilter === "all" ? undefined : activeFilter,
-        });
-
-        const fetched = response.data.transactions ?? [];
-        const baseTransactions = reset ? [] : cache.transactions;
-        const nextTransactions = reset ? fetched : [...baseTransactions, ...fetched];
-        const pagination = response.data.pagination;
-        const newPage = pagination?.page ?? targetPage;
-        const newHasMore = pagination ? pagination.page < pagination.pages : fetched.length === PAGE_SIZE;
-
-        cacheRef.current[activeFilter] = {
-          transactions: nextTransactions,
-          page: newPage,
-          hasMore: newHasMore,
-          lastFetched: Date.now(),
-        };
-
-        if (filter === activeFilter) {
-          setTransactions(nextTransactions);
-          setHasMore(newHasMore);
-          setPage(newPage);
-          setError(null);
-        }
-      } catch (err: any) {
-        console.error("Failed to load transactions", err);
-        const message = err?.message ?? "Unable to load history.";
-        const friendly = message.includes("Too many requests")
-          ? "You're making requests too quickly. Please wait a moment and try again."
-          : message;
-        if (filter === activeFilter) {
-          setError(friendly);
-        }
-      } finally {
-        loadingMapRef.current[activeFilter] = false;
-        if (filter === activeFilter) {
-          setIsLoading(false);
-          setIsRefreshing(false);
-          setIsFetchingMore(false);
-        }
+      if (nextFilter === "expense") {
+        return base.filter((tx) => tx.type === "expense");
       }
+      return base;
     },
-    [filter]
+    []
   );
 
-  useEffect(() => {
-    const cache = cacheRef.current[filter];
-
-    if (cache.transactions.length) {
-      setTransactions(cache.transactions);
-      setHasMore(cache.hasMore);
-      setPage(cache.page);
-      setIsLoading(false);
+  const loadTransactions = useCallback(async () => {
+    try {
       setError(null);
-    } else {
-      setTransactions([]);
-      setHasMore(true);
-      setPage(1);
-      setIsLoading(true);
+      const entries = await financeService.getTransactions();
+      const sorted = [...entries].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+      setAllTransactions(sorted);
+      setVisibleTransactions(computeVisible(sorted, filter));
+    } catch (err: any) {
+      console.error("Failed to load transactions", err);
+      setError(err?.message ?? "Unable to load history.");
+      setAllTransactions([]);
+      setVisibleTransactions([]);
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
     }
+  }, [computeVisible, filter]);
 
-    const shouldFetch = Date.now() - cache.lastFetched > CACHE_TTL || cache.transactions.length === 0;
+  useEffect(() => {
+    loadTransactions();
+  }, [loadTransactions]);
 
-    if (debounceRef.current) {
-      clearTimeout(debounceRef.current);
-    }
-
-    if (shouldFetch) {
-      debounceRef.current = setTimeout(() => {
-        loadTransactions({ reset: true, filterOverride: filter });
-      }, 350);
-    }
-
-    return () => {
-      if (debounceRef.current) {
-        clearTimeout(debounceRef.current);
-        debounceRef.current = null;
-      }
-    };
-  }, [filter, loadTransactions]);
+  useEffect(() => {
+    setVisibleTransactions(computeVisible(allTransactions, filter));
+  }, [allTransactions, computeVisible, filter]);
 
   const handleRefresh = () => {
     setIsRefreshing(true);
-    loadTransactions({ reset: true, filterOverride: filter });
+    loadTransactions();
   };
-
-  const handleLoadMore = () => {
-    if (isFetchingMore || isLoading || isRefreshing || !hasMore) {
-      return;
-    }
-    const currentCache = cacheRef.current[filter];
-    const nextPage = (currentCache?.page ?? page) + 1;
-    setIsFetchingMore(true);
-    loadTransactions({ pageOverride: nextPage, filterOverride: filter });
-  };
-
-  const totalIncome = transactions
-    .filter((tx) => tx.type === "income")
-    .reduce((sum, tx) => sum + tx.amount, 0);
-  const totalExpense = transactions
-    .filter((tx) => tx.type === "expense")
-    .reduce((sum, tx) => sum + tx.amount, 0);
 
   const renderItem = ({ item }: { item: Transaction }) => {
     const amountColor = item.type === "income" ? "#059669" : "#DC2626";
@@ -212,13 +127,13 @@ const SpendingHistoryScreen: React.FC = () => {
           <View style={styles.summaryChip}>
             <Text style={styles.summaryChipLabel}>Income</Text>
             <Text style={[styles.summaryChipValue, { color: "#059669" }]}>
-              {financeService.formatCurrency(totalIncome)}
+              {financeService.formatCurrency(totals.income)}
             </Text>
           </View>
           <View style={styles.summaryChip}>
             <Text style={styles.summaryChipLabel}>Expenses</Text>
             <Text style={[styles.summaryChipValue, { color: "#DC2626" }]}>
-              {financeService.formatCurrency(totalExpense)}
+              {financeService.formatCurrency(totals.expense)}
             </Text>
           </View>
         </View>
@@ -231,20 +146,7 @@ const SpendingHistoryScreen: React.FC = () => {
             style={[styles.filterButton, filter === type && styles.filterButtonActive]}
             onPress={() => {
               if (filter !== type) {
-                const cache = cacheRef.current[type];
                 setFilter(type);
-                if (cache.transactions.length) {
-                  setTransactions(cache.transactions);
-                  setHasMore(cache.hasMore);
-                  setPage(cache.page);
-                  setIsLoading(false);
-                  setError(null);
-                } else {
-                  setTransactions([]);
-                  setHasMore(true);
-                  setPage(1);
-                  setIsLoading(true);
-                }
               }
             }}
           >
@@ -260,21 +162,12 @@ const SpendingHistoryScreen: React.FC = () => {
       )}
 
       <FlatList
-        data={transactions}
+        data={visibleTransactions}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
-        onEndReachedThreshold={0.3}
-        onEndReached={handleLoadMore}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
-        ListFooterComponent={
-          isFetchingMore ? (
-            <View style={styles.footerSpinner}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : null
-        }
       />
     </View>
   );
