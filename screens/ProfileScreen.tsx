@@ -197,19 +197,6 @@ export const ProfileScreen: FC<Props> = ({ navigation }) => {
     );
   };
 
-  const goToUnfinishedTasks = () => {
-    Alert.alert(
-      "Coming Soon",
-      "Unfinished tasks screen will be available in a future update."
-    );
-  };
-
-  const goToUnfinishedGoals = () => {
-    Alert.alert(
-      "Coming Soon",
-      "Unfinished goals screen will be available in a future update."
-    );
-  };
 
   const handleExportData = async () => {
     try {
