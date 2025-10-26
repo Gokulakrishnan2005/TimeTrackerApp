@@ -60,6 +60,13 @@ const TasksScreen: React.FC = () => {
   const [selectedGoalForVision, setSelectedGoalForVision] = useState<string | null>(null);
   const insets = useSafeAreaInsets();
 
+  const welcomeMessage = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning! ☀️";
+    if (hour < 18) return "Good afternoon! 🌤️";
+    return "Good evening! 🌙";
+  }, []);
+
   useEffect(() => {
     loadTaskData();
   }, []);
@@ -269,7 +276,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onIncrement, loading, onSelec
         }
       >
         <View style={[styles.content, { paddingBottom: 96 + insets.bottom }]}>
-          <Text style={styles.title}>My Day</Text>
+          <Text style={styles.title}>{welcomeMessage}</Text>
 
           <View style={styles.summaryCardWrapper}>
             <View style={styles.summaryHero}>

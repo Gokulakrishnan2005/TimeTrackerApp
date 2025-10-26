@@ -10,11 +10,10 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
 import { storeData, getData } from "../services/LocalStorage";
-import { exportAppDataToCsv, importAppDataFromCsv } from "../services/dataTransferService";
+import { exportAppData, importAppData } from "../services/dataTransferService";
 import taskService from "../services/taskService";
 
 interface LocalProfile {
@@ -31,8 +30,18 @@ import { ProfileStackParamList } from '../navigation/AppNavigator';
 
 type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'ProfileHome'>;
 
-export const ProfileScreen: FC = () => {
-  const navigation = useNavigation<ProfileScreenNavigationProp>();
+type Props = {
+  navigation: ProfileScreenNavigationProp;
+};
+
+export const ProfileScreen: FC<Props> = ({ navigation }) => {
+  const welcomeMessage = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning! ☀️";
+    if (hour < 18) return "Good afternoon! 🌤️";
+    return "Good evening! 🌙";
+  }, []);
+
   const [isEditing, setIsEditing] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [profile, setProfile] = React.useState<LocalProfile>({
@@ -204,7 +213,7 @@ export const ProfileScreen: FC = () => {
 
   const handleExportData = async () => {
     try {
-      const result = await exportAppDataToCsv();
+      const result = await exportAppData();
       if (result.savedLocally) {
         Alert.alert(
           "Export Complete",
@@ -232,14 +241,13 @@ export const ProfileScreen: FC = () => {
 
   const handleImportData = async () => {
     try {
-      const imported = await importAppDataFromCsv();
+      const imported = await importAppData();
       if (imported.profile) {
         setProfile(imported.profile);
-        await storeData(PROFILE_STORAGE_KEY, imported.profile);
       }
       Alert.alert(
         "Import Complete",
-        `Restored ${imported.sessionsImported} sessions and ${imported.transactionsImported} transactions.`
+        `Restored ${imported.sessionsImported} tasks and goals.`
       );
     } catch (error: any) {
       Alert.alert("Import Failed", error?.message ?? "Please try again.");
@@ -248,6 +256,7 @@ export const ProfileScreen: FC = () => {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.containerContent}>
+      <Text style={styles.title}>{welcomeMessage}</Text>
       <View style={styles.headerCard}>
         <View style={styles.avatarWrapper}>
           {profile.avatar ? (
@@ -351,11 +360,11 @@ export const ProfileScreen: FC = () => {
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={handleExportData}>
-          <Text style={styles.menuText}>Export Data (CSV)</Text>
+          <Text style={styles.menuText}>Export Data (JSON)</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={handleImportData}>
-          <Text style={styles.menuText}>Import Data (CSV)</Text>
+          <Text style={styles.menuText}>Import Data (JSON)</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={goToIncomeExpenseHistory}>
@@ -371,6 +380,10 @@ export const ProfileScreen: FC = () => {
               </View>
             )}
           </View>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ProfileAccomplishedTasks')}>
+          <Text style={styles.menuText}>Accomplished Tasks</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={goToUnfinishedGoals}>
@@ -418,6 +431,10 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.xl,
     paddingBottom: spacing.xxxl,
+  },
+  title: {
+    ...typography.h1,
+    marginBottom: spacing.lg,
   },
   headerCard: {
     backgroundColor: colors.surface,

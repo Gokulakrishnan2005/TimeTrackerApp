@@ -73,11 +73,10 @@ export const moveItemToPurchased = async (itemId: string): Promise<WishlistData>
 export const deleteWishlistItem = async (itemId: string): Promise<WishlistData> => {
   const currentData = await getWishlistData();
   const newWishlistItems = currentData.wishlistItems.filter(item => item.id !== itemId);
-  const newPurchasedItems = currentData.purchasedItems.filter(item => item.id !== itemId);
 
   const newData: WishlistData = {
+    ...currentData,
     wishlistItems: newWishlistItems,
-    purchasedItems: newPurchasedItems,
   };
 
   await saveWishlistData(newData);

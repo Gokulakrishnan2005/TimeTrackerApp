@@ -2,7 +2,7 @@ import React from 'react';
 import { FC } from "react";
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { NavigationContainer } from "@react-navigation/native";
+import { NavigationContainer, NavigatorScreenParams } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { HomeScreen } from "../screens/HomeScreen";
 import TasksScreen from "../screens/TasksScreen";
@@ -14,13 +14,14 @@ import WishlistScreen from '../screens/WishlistScreen';
 import SpendingHistoryScreen from '../screens/SpendingHistoryScreen';
 import UnfinishedTasksScreen from '../screens/UnfinishedTasksScreen';
 import NotificationsScreen from '../screens/NotificationsScreen';
+import { AccomplishedTasksScreen } from '../screens/AccomplishedTasksScreen';
 
 export type RootTabParamList = {
   Home: undefined;
   Finance: undefined;
   Add: undefined;
   Tasks: undefined;
-  Profile: undefined;
+  Profile: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
@@ -32,6 +33,7 @@ export type ProfileStackParamList = {
   ProfileSpendingHistory: undefined;
   ProfileUnfinishedTasks: { type: 'tasks' | 'goals' };
   ProfileUnfinishedGoals: { type: 'tasks' | 'goals' };
+  ProfileAccomplishedTasks: undefined;
 };
 
 const ProfileStack = createStackNavigator<ProfileStackParamList>();
@@ -82,6 +84,15 @@ const ProfileStackNavigator: FC = () => {
         options={{
           headerShown: true,
           title: 'Unfinished Goals',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <ProfileStack.Screen
+        name="ProfileAccomplishedTasks"
+        component={AccomplishedTasksScreen}
+        options={{
+          headerShown: true,
+          title: 'Accomplished Tasks',
           headerBackTitle: 'Back',
         }}
       />

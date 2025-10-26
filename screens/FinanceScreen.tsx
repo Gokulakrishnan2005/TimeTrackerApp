@@ -447,7 +447,7 @@ const FinanceScreen: React.FC = () => {
           width: '100%',
           alignSelf: 'center'
         }]}> 
-        <Text style={[styles.title, (isSmall || isTiny) && styles.titleSmall]}>Finance Overview</Text>
+        <Text style={[styles.title, (isSmall || isTiny) && styles.titleSmall]}>Financial Overview</Text>
 
         {/* Summary Cards */}
         <View style={[
@@ -755,6 +755,16 @@ const FinanceScreen: React.FC = () => {
         onTransactionAdded={loadFinanceData}
         defaultType={defaultModalType}
       />
+
+      <TouchableOpacity
+        style={styles.fab}
+        onPress={() => {
+          setDefaultModalType(undefined);
+          setShowAddModal(true);
+        }}
+      >
+        <Text style={styles.fabText}>+</Text>
+      </TouchableOpacity>
     </View>
   );
 };
