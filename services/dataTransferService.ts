@@ -78,20 +78,21 @@ const ensureBackupDirectoryUri = async (): Promise<string | null> => {
   return null;
 };
 
-const createFileInDirectory = async (directoryUri: string, fileName: string): Promise<string> => {
+const createFileInDirectory = async (directoryUri: string, fileName: string, mimeType: string = 'text/csv'): Promise<string> => {
   if (!StorageAccessFramework) {
     throw new Error("Storage framework unavailable on this platform.");
   }
 
   try {
-    return await StorageAccessFramework.createFileAsync(directoryUri, fileName, "text/csv");
+    return await StorageAccessFramework.createFileAsync(directoryUri, fileName, mimeType);
   } catch (error: any) {
     if (error?.message?.includes("EEXIST")) {
       const timestamp = Date.now();
+      const extension = fileName.split('.').pop();
       return await StorageAccessFramework.createFileAsync(
         directoryUri,
-        `${fileName.replace(/\.csv$/, "")}_${timestamp}.csv`,
-        "text/csv"
+        `${fileName.replace(`.${extension}`, "")}_${timestamp}.${extension}`,
+        mimeType
       );
     }
     throw error;
@@ -105,8 +106,8 @@ const pickLatestBackupUri = async (directoryUri: string): Promise<string | null>
 
   try {
     const entries: string[] = await StorageAccessFramework.readDirectoryAsync(directoryUri);
-    const csvFiles = entries
-      .filter((uri) => uri.endsWith(".csv"))
+    const jsonFiles = entries
+      .filter((uri) => uri.endsWith(".json"))
       .map((uri) => ({
         uri,
         name: uri.split("/").pop() ?? uri,
@@ -114,11 +115,11 @@ const pickLatestBackupUri = async (directoryUri: string): Promise<string | null>
       .filter((entry) => entry.name.startsWith("timeTracker_backup_"))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    if (csvFiles.length === 0) {
+    if (jsonFiles.length === 0) {
       return null;
     }
 
-    return csvFiles[csvFiles.length - 1].uri;
+    return jsonFiles[jsonFiles.length - 1].uri;
   } catch (error) {
     console.warn("Failed to read backup directory", error);
     return null;
@@ -176,43 +177,31 @@ export interface ImportResult {
   activeSessionRestored: boolean;
 }
 
-export const exportAppDataToCsv = async (): Promise<ExportResult> => {
+export const exportAppData = async (): Promise<ExportResult> => {
   const profile = (await getData(PROFILE_STORAGE_KEY)) as ProfileRecord | null;
-  const sessions = await getAllSessions();
-  const activeSession = await getActiveSession();
-  const metadataRaw = (await getData(SESSION_STORAGE_KEYS.meta)) ?? {};
-  const metadata = {
-    lastSessionNumber:
-      typeof metadataRaw?.lastSessionNumber === "number"
-        ? metadataRaw.lastSessionNumber
-        : sessions.length,
-  };
-  const transactions = await financeService.getTransactions();
+  const taskData = await taskService.getAllData();
 
-  const payload: BackupPayload = {
+  const payload = {
     profile: profile ?? null,
-    sessions: sessions.map(serializeSession),
-    activeSession: activeSession ? serializeSession(activeSession) : null,
-    metadata,
-    transactions,
+    ...taskData,
   };
 
-  const csv = buildCsv(payload);
+  const json = JSON.stringify(payload, null, 2);
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const fileName = `timeTracker_backup_${timestamp}.csv`;
+  const fileName = `timeTracker_backup_${timestamp}.json`;
 
   if (Platform.OS === "android" && StorageAccessFramework) {
     try {
       const directoryUri = await ensureBackupDirectoryUri();
       if (directoryUri) {
-        const createdUri = await createFileInDirectory(directoryUri, fileName);
-        await FileSystem.writeAsStringAsync(createdUri, csv);
+        const createdUri = await createFileInDirectory(directoryUri, fileName, 'application/json');
+        await FileSystem.writeAsStringAsync(createdUri, json);
         return {
           uri: createdUri,
           fileName,
           savedLocally: false,
-          sessionsCount: payload.sessions.length,
-          transactionsCount: payload.transactions.length,
+          sessionsCount: payload.tasks.length,
+          transactionsCount: 0, // This needs to be updated
         };
       }
     } catch (error) {
@@ -241,7 +230,7 @@ export const exportAppDataToCsv = async (): Promise<ExportResult> => {
   };
 };
 
-export const importAppDataFromCsv = async (): Promise<ImportResult> => {
+export const importAppData = async (): Promise<ImportResult> => {
   let fileUri: string | null = null;
 
   if (Platform.OS === "android" && StorageAccessFramework) {
@@ -252,11 +241,10 @@ export const importAppDataFromCsv = async (): Promise<ImportResult> => {
         if (latest) {
           fileUri = latest;
         } else {
-          // No backup found in granted directory; allow manual selection.
-          fileUri = await StorageAccessFramework.openDocumentAsync("text/*");
+          fileUri = await StorageAccessFramework.openDocumentAsync("application/json");
         }
       } else {
-        fileUri = await StorageAccessFramework.openDocumentAsync("text/*");
+        fileUri = await StorageAccessFramework.openDocumentAsync("application/json");
       }
       if (!fileUri) {
         throw new Error("Import cancelled");
@@ -265,7 +253,6 @@ export const importAppDataFromCsv = async (): Promise<ImportResult> => {
       if (error?.message?.includes("Documents service is not available")) {
         throw new Error("Storage access is unavailable on this device.");
       }
-      // If the user cancels the picker, surface a friendly message.
       throw new Error(error?.message ?? "Import cancelled");
     }
   }
@@ -283,12 +270,12 @@ export const importAppDataFromCsv = async (): Promise<ImportResult> => {
 
     const entries = await FileSystem.readDirectoryAsync(directoryInfo.base);
     const candidates = entries
-      .filter((name) => name.endsWith(".csv") && name.startsWith("timeTracker_backup_"))
+      .filter((name) => name.endsWith(".json") && name.startsWith("timeTracker_backup_"))
       .sort();
 
     if (candidates.length === 0) {
       throw new Error(
-        "No backup CSV found. Export your data first, then retry the import."
+        "No backup JSON found. Export your data first, then retry the import."
       );
     }
 
@@ -296,30 +283,38 @@ export const importAppDataFromCsv = async (): Promise<ImportResult> => {
   }
 
   const contents = await FileSystem.readAsStringAsync(fileUri);
-
-  const restored = await restoreFromCsv(contents);
+  const restored = JSON.parse(contents);
 
   await persistRestoredData(restored);
 
   return {
     uri: fileUri,
     profile: restored.profile,
-    sessionsImported: restored.sessions.length,
-    transactionsImported: restored.transactions.length,
-    activeSessionRestored: Boolean(restored.activeSession),
+    sessionsImported: restored.tasks.length,
+    transactionsImported: 0,
+    activeSessionRestored: false,
   };
 };
 
-const persistRestoredData = async (payload: BackupPayload) => {
+const persistRestoredData = async (payload: any) => {
   if (payload.profile) {
     await storeData(PROFILE_STORAGE_KEY, payload.profile);
   }
-  await storeData(SESSION_STORAGE_KEYS.sessions, payload.sessions);
-  await storeData(SESSION_STORAGE_KEYS.active, {
-    current: payload.activeSession ?? null,
-  });
-  await storeData(SESSION_STORAGE_KEYS.meta, payload.metadata);
-  await storeData(FINANCE_STORAGE_KEY, payload.transactions);
+  if (payload.habits) {
+    await storeData('habits', payload.habits);
+  }
+  if (payload.tasks) {
+    await storeData('tasks', payload.tasks);
+  }
+  if (payload.goals) {
+    await storeData('goals', payload.goals);
+  }
+  if (payload.unfinishedTasks) {
+    await storeData('unfinished_tasks', payload.unfinishedTasks);
+  }
+  if (payload.unfinishedGoals) {
+    await storeData('unfinished_goals', payload.unfinishedGoals);
+  }
 };
 
 const serializeSession = (session: Session): SerializedSession => ({
@@ -332,207 +327,3 @@ const serializeSession = (session: Session): SerializedSession => ({
   status: session.status,
 });
 
-const buildCsv = (payload: BackupPayload): string => {
-  const lines: string[] = [];
-
-  lines.push("#PROFILE");
-  lines.push("name,email,avatar,createdAt");
-  if (payload.profile) {
-    lines.push(
-      [
-        escapeCsv(payload.profile.name ?? ""),
-        escapeCsv(payload.profile.email ?? ""),
-        escapeCsv(payload.profile.avatar ?? ""),
-        escapeCsv(payload.profile.createdAt ?? ""),
-      ].join(",")
-    );
-  }
-
-  lines.push("#SESSION_METADATA");
-  lines.push("lastSessionNumber");
-  lines.push(escapeCsv(String(payload.metadata.lastSessionNumber ?? 0)));
-
-  lines.push("#ACTIVE_SESSION");
-  lines.push("id,sessionNumber,startDateTime,endDateTime,duration,experience,status");
-  if (payload.activeSession) {
-    lines.push(sessionToCsvRow(payload.activeSession));
-  }
-
-  lines.push("#SESSIONS");
-  lines.push("id,sessionNumber,startDateTime,endDateTime,duration,experience,status");
-  payload.sessions.forEach((session) => {
-    lines.push(sessionToCsvRow(session));
-  });
-
-  lines.push("#TRANSACTIONS");
-  lines.push("id,type,amount,category,notes,date,createdAt,updatedAt");
-  payload.transactions.forEach((transaction) => {
-    lines.push(
-      [
-        escapeCsv(transaction.id),
-        escapeCsv(transaction.type),
-        escapeCsv(String(transaction.amount)),
-        escapeCsv(transaction.category),
-        escapeCsv(transaction.notes ?? ""),
-        escapeCsv(transaction.date ?? ""),
-        escapeCsv(transaction.createdAt ?? ""),
-        escapeCsv(transaction.updatedAt ?? ""),
-      ].join(",")
-    );
-  });
-
-  return lines.join("\n");
-};
-
-const sessionToCsvRow = (session: SerializedSession): string =>
-  [
-    escapeCsv(session.id),
-    escapeCsv(String(session.sessionNumber)),
-    escapeCsv(session.startDateTime),
-    escapeCsv(session.endDateTime ?? ""),
-    escapeCsv(String(session.duration ?? 0)),
-    escapeCsv(session.experience ?? ""),
-    escapeCsv(session.status ?? ""),
-  ].join(",");
-
-const escapeCsv = (value: string): string => {
-  const str = value ?? "";
-  if (str.includes("\"") || str.includes(",") || str.includes("\n")) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-};
-
-const restoreFromCsv = async (contents: string): Promise<BackupPayload> => {
-  const lines = contents.split(/\r?\n/);
-  let section: string | null = null;
-  const payload: BackupPayload = {
-    profile: null,
-    sessions: [],
-    activeSession: null,
-    metadata: { lastSessionNumber: 0 },
-    transactions: [],
-  };
-
-  for (const line of lines) {
-    if (!line.trim()) {
-      continue;
-    }
-    if (line.startsWith("#")) {
-      section = line.replace(/^#/, "").trim().toUpperCase();
-      continue;
-    }
-    if (section === "PROFILE") {
-      if (!payload.profile) {
-        const [name, email, avatar, createdAt] = parseCsvLine(line);
-        payload.profile = {
-          name: name ?? "Guest",
-          email: email ?? "",
-          avatar: avatar || undefined,
-          createdAt: createdAt || undefined,
-        };
-      }
-      continue;
-    }
-    if (section === "SESSION_METADATA") {
-      const [lastSessionNumber] = parseCsvLine(line);
-      payload.metadata.lastSessionNumber = Number(lastSessionNumber) || 0;
-      continue;
-    }
-    if (section === "ACTIVE_SESSION") {
-      if (!line.startsWith("id")) {
-        const [id, sessionNumber, startDateTime, endDateTime, duration, experience, status] = parseCsvLine(line);
-        if (id) {
-          payload.activeSession = {
-            id,
-            sessionNumber: Number(sessionNumber) || 0,
-            startDateTime,
-            endDateTime: endDateTime || null,
-            duration: Number(duration) || 0,
-            experience: experience ?? "",
-            status: (status as SessionStatus) || "active",
-          };
-        }
-      }
-      continue;
-    }
-    if (section === "SESSIONS") {
-      if (line.startsWith("id")) {
-        continue;
-      }
-      const [id, sessionNumber, startDateTime, endDateTime, duration, experience, status] = parseCsvLine(line);
-      if (id) {
-        payload.sessions.push({
-          id,
-          sessionNumber: Number(sessionNumber) || 0,
-          startDateTime,
-          endDateTime: endDateTime || null,
-          duration: Number(duration) || 0,
-          experience: experience ?? "",
-          status: (status as SessionStatus) || "completed",
-        });
-      }
-      continue;
-    }
-    if (section === "TRANSACTIONS") {
-      if (line.startsWith("id")) {
-        continue;
-      }
-      const [id, type, amount, category, notes, date, createdAt, updatedAt] = parseCsvLine(line);
-      if (id) {
-        payload.transactions.push({
-          id,
-          type: type === "expense" ? "expense" : "income",
-          amount: Number(amount) || 0,
-          category: category ?? "",
-          notes: notes ?? "",
-          date: date ?? new Date().toISOString(),
-          createdAt: createdAt ?? date ?? new Date().toISOString(),
-          updatedAt: updatedAt ?? createdAt ?? new Date().toISOString(),
-        });
-      }
-    }
-  }
-
-  if (!payload.profile) {
-    payload.profile = {
-      name: "Guest",
-      email: "",
-      createdAt: new Date().toISOString(),
-    };
-  }
-
-  if (payload.metadata.lastSessionNumber === 0) {
-    payload.metadata.lastSessionNumber = payload.sessions.length;
-  }
-
-  return payload;
-};
-
-const parseCsvLine = (line: string): string[] => {
-  const result: string[] = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i += 1) {
-    const char = line[i];
-    if (char === "\"") {
-      if (inQuotes && line[i + 1] === "\"") {
-        current += "\"";
-        i += 1;
-      } else {
-        inQuotes = !inQuotes;
-      }
-      continue;
-    }
-    if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-      continue;
-    }
-    current += char;
-  }
-
-  result.push(current);
-  return result.map((value) => value.trim());
-};

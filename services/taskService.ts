@@ -104,6 +104,25 @@ class TaskService {
   }
 
   /**
+   * Update a daily task
+   */
+  async updateTask(taskId: string, updates: Partial<DailyTask>): Promise<DailyTask> {
+    try {
+      const tasks = await getData('tasks') || [];
+      const index = tasks.findIndex((task: DailyTask) => task.id === taskId);
+      if (index !== -1) {
+        tasks[index] = { ...tasks[index], ...updates, updatedAt: new Date().toISOString() };
+        await storeData('tasks', tasks);
+        return tasks[index];
+      }
+      throw new Error('Task not found');
+    } catch (error) {
+      console.error('Error updating task:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Get unfinished tasks
    */
   async getUnfinishedTasks(): Promise<(DailyTask & { archivedAt: string; period: string; originalDate: string })[]> {
@@ -111,22 +130,12 @@ class TaskService {
       const stored = await getData('unfinished_tasks');
 
       if (!Array.isArray(stored)) {
-        console.log('No unfinished tasks found or invalid data format');
         return [];
       }
 
-      const validTasks = stored.filter((item): item is (DailyTask & { archivedAt: string; period: string; originalDate: string }) => {
-        return item &&
-               typeof item === 'object' &&
-               typeof item.id === 'string' &&
-               typeof item.title === 'string' &&
-               typeof item.date === 'string' &&
-               typeof item.archivedAt === 'string' &&
-               typeof item.period === 'string' &&
-               typeof item.originalDate === 'string';
-      });
-
-      return validTasks;
+      return stored.filter((item): item is DailyTask & { archivedAt: string; period: string; originalDate: string } =>
+        item && typeof item === 'object' && !item.isCompleted
+      );
     } catch (error) {
       console.error('Error fetching unfinished tasks:', error);
       return [];
@@ -164,13 +173,13 @@ class TaskService {
           return habit;
         }
 
-        // Determine if yesterday was completed to maintain streak
         const yesterday = new Date(today);
-        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setDate(today.getDate() - 1);
         const yesterdayStr = yesterday.toISOString().split('T')[0];
-        const yesterdayCompleted = habit.completedDates.some((date: string) => date.startsWith(yesterdayStr));
 
-        if (!yesterdayCompleted) {
+        const lastCompletedStr = habit.lastCompletedDate ? new Date(habit.lastCompletedDate).toISOString().split('T')[0] : null;
+
+        if (lastCompletedStr !== yesterdayStr) {
           habit.currentStreak = 0;
         }
 
@@ -246,38 +255,9 @@ class TaskService {
    */
   async getDailyTasks(date?: string): Promise<DailyTask[]> {
     try {
-      // Get active tasks
-      const activeTasks = await getData('tasks') || [];
-
-      // Get expired tasks from unfinished storage
-      const unfinishedTasks = await this.getUnfinishedTasks();
-      const expiredTasks = unfinishedTasks
-        .filter(task => task.period === 'daily')
-        .map(task => ({
-          ...task,
-          // Mark as expired for UI display
-          isExpired: true,
-          originalDate: task.originalDate,
-        }));
-
-      // Combine active and expired tasks, removing duplicates by ID
-      const taskMap = new Map<string, DailyTask>();
-
-      // Add active tasks first
-      activeTasks.forEach((task: DailyTask) => {
-        taskMap.set(task.id, { ...task, isExpired: false });
-      });
-
-      // Add expired tasks (will overwrite if same ID exists)
-      expiredTasks.forEach((task: DailyTask) => {
-        taskMap.set(task.id, task);
-      });
-
-      // Convert back to array
-      const allTasks = Array.from(taskMap.values());
-
+      const allTasks = await getData('tasks') || [];
       if (date) {
-        return allTasks.filter(task => task.date === date);
+        return allTasks.filter((task: DailyTask) => task.date === date);
       }
       return allTasks;
     } catch (error) {
@@ -291,26 +271,10 @@ class TaskService {
    */
   async toggleTaskCompletion(taskId: string): Promise<DailyTask> {
     try {
-      const storedTasks = (await getData('tasks')) as DailyTask[] | null;
-      const tasks: DailyTask[] = storedTasks ? [...storedTasks] : [];
-      const index = tasks.findIndex((task: DailyTask) => task.id === taskId);
-      if (index !== -1) {
-        const task = tasks[index];
-        const todayStr = new Date().toISOString().split('T')[0];
-        const lastCompletedStr = task.completedAt?.split('T')[0];
-
-        // Prevent multiple completions in same day
-        if (task.isCompleted && lastCompletedStr === todayStr) {
-          return task;
-        }
-
-        task.isCompleted = !task.isCompleted;
-        task.completedAt = task.isCompleted ? new Date().toISOString() : null;
-        task.updatedAt = new Date().toISOString();
-        tasks[index] = task;
-
-        await storeData('tasks', tasks);
-        return task;
+      const tasks = await getData('tasks') || [];
+      const task = tasks.find((t: DailyTask) => t.id === taskId);
+      if (task) {
+        return await this.updateTask(taskId, { isCompleted: !task.isCompleted });
       }
       throw new Error('Task not found');
     } catch (error) {
@@ -322,63 +286,6 @@ class TaskService {
   /**
    * Carry over unfinished tasks across day/week/month boundaries
    */
-  async carryOverTasks(): Promise<void> {
-    try {
-      const storedTasks = (await getData('tasks')) as DailyTask[] | null;
-      const tasks: DailyTask[] = storedTasks ? [...storedTasks] : [];
-      const storedArchive = (await getData('unfinished_tasks')) as (DailyTask & { archivedAt?: string; period?: string })[] | null;
-      const unfinishedArchive: (DailyTask & { archivedAt?: string; period?: string })[] = storedArchive ? [...storedArchive] : [];
-      const now = new Date();
-      const todayStr = now.toISOString().split('T')[0];
-
-      // Daily carry over (copy unfinished from yesterday)
-      const yesterday = new Date(now);
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split('T')[0];
-
-      const yesterdayUnfinished = tasks.filter((task: DailyTask) => task.date === yesterdayStr && !task.isCompleted);
-      const carriedTasks = yesterdayUnfinished.map((task: DailyTask) => ({
-        ...task,
-        id: `${task.id}-${todayStr}`,
-        date: todayStr,
-        isCompleted: false,
-        completedAt: null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }));
-
-      const nextTasks = [...tasks, ...carriedTasks];
-
-      // Weekly archive (run on Sunday)
-      if (now.getDay() === 0) {
-        const lastWeek = new Date(now);
-        lastWeek.setDate(lastWeek.getDate() - 7);
-        const lastWeekStr = lastWeek.toISOString().split('T')[0];
-        const weeklyUnfinished = nextTasks.filter((task: DailyTask) => task.date === lastWeekStr && !task.isCompleted);
-
-        if (weeklyUnfinished.length) {
-          unfinishedArchive.push(...weeklyUnfinished.map((task: DailyTask) => ({ ...task, archivedAt: todayStr, period: 'weekly' })));
-        }
-      }
-
-      // Monthly archive (run on 1st)
-      if (now.getDate() === 1) {
-        const lastMonth = new Date(now);
-        lastMonth.setMonth(lastMonth.getMonth() - 1);
-        const lastMonthStr = lastMonth.toISOString().split('T')[0];
-        const monthlyUnfinished = nextTasks.filter((task: DailyTask) => task.date === lastMonthStr && !task.isCompleted);
-
-        if (monthlyUnfinished.length) {
-          unfinishedArchive.push(...monthlyUnfinished.map((task: DailyTask) => ({ ...task, archivedAt: todayStr, period: 'monthly' })));
-        }
-      }
-
-      await storeData('tasks', nextTasks);
-      await storeData('unfinished_tasks', unfinishedArchive);
-    } catch (error) {
-      console.error('Error carrying over tasks:', error);
-    }
-  }
 
   /**
    * Delete a daily task
@@ -431,38 +338,11 @@ class TaskService {
   /**
    * Get goals by type (including expired ones so they stay visible)
    */
-  async getGoals(type?: string): Promise<Goal[]> {
+  async getGoals(type?: 'weekly' | 'monthly' | 'yearly'): Promise<Goal[]> {
     try {
-      // Get active goals
-      const activeGoals = await getData('goals') || [];
-
-      // Get expired goals from unfinished storage
-      const unfinishedGoals = await this.getUnfinishedGoals();
-      const expiredGoals = unfinishedGoals.map(goal => ({
-        ...goal,
-        // Mark as expired for UI display
-        isExpired: true,
-        originalPeriod: goal.originalPeriod,
-      }));
-
-      // Combine active and expired goals, removing duplicates by ID
-      const goalMap = new Map<string, Goal>();
-
-      // Add active goals first
-      activeGoals.forEach((goal: Goal) => {
-        goalMap.set(goal.id, { ...goal, isExpired: false });
-      });
-
-      // Add expired goals (will overwrite if same ID exists)
-      expiredGoals.forEach((goal: Goal) => {
-        goalMap.set(goal.id, goal);
-      });
-
-      // Convert back to array
-      const allGoals = Array.from(goalMap.values());
-
+      const allGoals = await getData('goals') || [];
       if (type) {
-        return allGoals.filter(goal => goal.type === type);
+        return allGoals.filter((goal: Goal) => goal.type === type);
       }
       return allGoals;
     } catch (error) {
@@ -667,64 +547,36 @@ class TaskService {
       const storedTasks = await getData('tasks');
 
       if (!Array.isArray(storedTasks)) {
-        console.log('No tasks found or invalid data format');
         return 0;
       }
 
-      const tasks: DailyTask[] = storedTasks.filter((item): item is DailyTask => {
-        return item &&
-               typeof item === 'object' &&
-               typeof item.id === 'string' &&
-               typeof item.title === 'string' &&
-               typeof item.date === 'string' &&
-               typeof item.isCompleted === 'boolean';
+      const tasks: DailyTask[] = storedTasks.filter((item): item is DailyTask =>
+        item && typeof item === 'object' && typeof item.id === 'string'
+      );
+
+      const accomplished = tasks.filter((task: DailyTask) => {
+        const taskDate = new Date(task.date);
+        return taskDate.toDateString() < today && task.isCompleted;
       });
 
-      const unfinished = tasks.filter((task: DailyTask) => {
-        try {
-          const taskDate = new Date(task.date);
-          if (isNaN(taskDate.getTime())) {
-            console.warn('Invalid task date:', task.date);
-            return false;
-          }
-          const taskDateStr = taskDate.toDateString();
-          return taskDateStr < today && !task.isCompleted;
-        } catch (error) {
-          console.warn('Error parsing task date:', task.date, error);
-          return false;
-        }
-      });
+      if (accomplished.length > 0) {
+        const storedArchive = await getData('accomplished_tasks') || [];
+        const archive: (DailyTask & { archivedAt: string })[] = Array.isArray(storedArchive) ? storedArchive : [];
 
-      if (unfinished.length > 0) {
-        const storedArchive = await getData('unfinished_tasks');
-        const archive: (DailyTask & { archivedAt: string; period: string; originalDate: string })[] =
-          Array.isArray(storedArchive) ? storedArchive.filter((item): item is (DailyTask & { archivedAt: string; period: string; originalDate: string }) => {
-            return item &&
-                   typeof item === 'object' &&
-                   typeof item.id === 'string' &&
-                   typeof item.title === 'string';
-          }) : [];
-
-        const archivedTasks = unfinished.map((task: DailyTask) => ({
+        const archivedTasks = accomplished.map((task: DailyTask) => ({
           ...task,
           archivedAt: now.toISOString(),
-          period: 'daily',
-          originalDate: task.date,
         }));
 
-        await storeData('unfinished_tasks', [...archive, ...archivedTasks]);
-
-        // Remove from active tasks
-        const remaining = tasks.filter((t: DailyTask) =>
-          !unfinished.find((u: DailyTask) => u.id === t.id)
-        );
-        await storeData('tasks', remaining);
+        await storeData('accomplished_tasks', [...archive, ...archivedTasks]);
       }
 
-      return unfinished.length;
+      const remaining = tasks.filter((t: DailyTask) => !accomplished.find((a: DailyTask) => a.id === t.id));
+      await storeData('tasks', remaining);
+
+      return accomplished.length;
     } catch (error) {
-      console.error('Error archiving unfinished tasks:', error);
-      console.log('Task archiving failed - this might be due to invalid data format or date issues');
+      console.error('Error archiving accomplished tasks:', error);
       return 0;
     }
   }
@@ -752,49 +604,26 @@ class TaskService {
                typeof item.isCompleted === 'boolean';
       });
 
-      const unfinished = goals.filter((goal: Goal) => {
+      const accomplished = goals.filter((goal: Goal) => {
         if (goal.type !== 'weekly') return false;
-
-        try {
-          const endDate = new Date(goal.endDate);
-          if (isNaN(endDate.getTime())) {
-            console.warn('Invalid goal end date:', goal.endDate);
-            return false;
-          }
-
-          const isExpired = endDate < now;
-          const isIncomplete = !goal.isCompleted && goal.currentValue < goal.targetValue;
-          return isExpired && isIncomplete;
-        } catch (error) {
-          console.warn('Error parsing goal end date:', goal.endDate, error);
-          return false;
-        }
+        const endDate = new Date(goal.endDate);
+        return endDate < now && goal.isCompleted;
       });
 
-      if (unfinished.length > 0) {
-        const storedArchive = await getData('unfinished_goals');
-        const archive: (Goal & { archivedAt: string; originalPeriod: string })[] =
-          Array.isArray(storedArchive) ? storedArchive.filter((item): item is (Goal & { archivedAt: string; originalPeriod: string }) => {
-            return item &&
-                   typeof item === 'object' &&
-                   typeof item.id === 'string' &&
-                   typeof item.title === 'string';
-          }) : [];
+      if (accomplished.length > 0) {
+        const storedArchive = await getData('accomplished_tasks') || [];
+        const archive: (Goal & { archivedAt: string })[] = Array.isArray(storedArchive) ? storedArchive : [];
 
-        const archivedGoals = unfinished.map((goal: Goal) => ({
+        const archivedGoals = accomplished.map((goal: Goal) => ({
           ...goal,
           archivedAt: now.toISOString(),
-          originalPeriod: goal.type,
         }));
 
-        await storeData('unfinished_goals', [...archive, ...archivedGoals]);
-
-        // Remove from active goals
-        const remaining = goals.filter((g: Goal) =>
-          !unfinished.find((u: Goal) => u.id === g.id)
-        );
-        await storeData('goals', remaining);
+        await storeData('accomplished_tasks', [...archive, ...archivedGoals]);
       }
+
+      const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
+      await storeData('goals', remaining);
 
       return unfinished.length;
     } catch (error) {
@@ -807,6 +636,46 @@ class TaskService {
   /**
    * Archive unfinished yearly goals (called on app start)
    */
+  async archiveUnfinishedMonthlyGoals(): Promise<number> {
+    try {
+      const now = new Date();
+      const storedGoals = await getData('goals');
+
+      if (!Array.isArray(storedGoals)) {
+        return 0;
+      }
+
+      const goals: Goal[] = storedGoals.filter((item): item is Goal =>
+        item && typeof item === 'object' && item.type === 'monthly' && typeof item.endDate === 'string'
+      );
+
+      const accomplished = goals.filter((goal: Goal) => {
+        const endDate = new Date(goal.endDate);
+        return endDate < now && goal.isCompleted;
+      });
+
+      if (accomplished.length > 0) {
+        const storedArchive = await getData('accomplished_tasks') || [];
+        const archive: (Goal & { archivedAt: string })[] = Array.isArray(storedArchive) ? storedArchive : [];
+
+        const archivedGoals = accomplished.map((goal: Goal) => ({
+          ...goal,
+          archivedAt: now.toISOString(),
+        }));
+
+        await storeData('accomplished_tasks', [...archive, ...archivedGoals]);
+      }
+
+      const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
+      await storeData('goals', remaining);
+
+      return unfinished.length;
+    } catch (error) {
+      console.error('Error archiving monthly goals:', error);
+      return 0;
+    }
+  }
+
   async archiveUnfinishedYearlyGoals(): Promise<number> {
     try {
       const now = new Date();
@@ -827,49 +696,26 @@ class TaskService {
                typeof item.isCompleted === 'boolean';
       });
 
-      const unfinished = goals.filter((goal: Goal) => {
+      const accomplished = goals.filter((goal: Goal) => {
         if (goal.type !== 'yearly') return false;
-
-        try {
-          const endDate = new Date(goal.endDate);
-          if (isNaN(endDate.getTime())) {
-            console.warn('Invalid goal end date:', goal.endDate);
-            return false;
-          }
-
-          const isExpired = endDate < now;
-          const isIncomplete = !goal.isCompleted && goal.currentValue < goal.targetValue;
-          return isExpired && isIncomplete;
-        } catch (error) {
-          console.warn('Error parsing goal end date:', goal.endDate, error);
-          return false;
-        }
+        const endDate = new Date(goal.endDate);
+        return endDate < now && goal.isCompleted;
       });
 
-      if (unfinished.length > 0) {
-        const storedArchive = await getData('unfinished_goals');
-        const archive: (Goal & { archivedAt: string; originalPeriod: string })[] =
-          Array.isArray(storedArchive) ? storedArchive.filter((item): item is (Goal & { archivedAt: string; originalPeriod: string }) => {
-            return item &&
-                   typeof item === 'object' &&
-                   typeof item.id === 'string' &&
-                   typeof item.title === 'string';
-          }) : [];
+      if (accomplished.length > 0) {
+        const storedArchive = await getData('accomplished_tasks') || [];
+        const archive: (Goal & { archivedAt: string })[] = Array.isArray(storedArchive) ? storedArchive : [];
 
-        const archivedGoals = unfinished.map((goal: Goal) => ({
+        const archivedGoals = accomplished.map((goal: Goal) => ({
           ...goal,
           archivedAt: now.toISOString(),
-          originalPeriod: goal.type,
         }));
 
-        await storeData('unfinished_goals', [...archive, ...archivedGoals]);
-
-        // Remove from active goals
-        const remaining = goals.filter((g: Goal) =>
-          !unfinished.find((u: Goal) => u.id === g.id)
-        );
-        await storeData('goals', remaining);
+        await storeData('accomplished_tasks', [...archive, ...archivedGoals]);
       }
+
+      const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
+      await storeData('goals', remaining);
 
       return unfinished.length;
     } catch (error) {
@@ -882,10 +728,11 @@ class TaskService {
   /**
    * Archive all unfinished items (comprehensive method)
    */
-  async archiveAllUnfinishedItems(): Promise<{ tasks: number; weeklyGoals: number; yearlyGoals: number }> {
+  async archiveAllUnfinishedItems(): Promise<{ tasks: number; weeklyGoals: number; monthlyGoals: number; yearlyGoals: number }> {
     const results = {
       tasks: await this.archiveUnfinishedDailyTasks(),
       weeklyGoals: await this.archiveUnfinishedWeeklyGoals(),
+      monthlyGoals: await this.archiveUnfinishedMonthlyGoals(),
       yearlyGoals: await this.archiveUnfinishedYearlyGoals(),
     };
     return results;
@@ -1048,26 +895,28 @@ class TaskService {
   /**
    * Get unfinished goals
    */
+  async getAccomplishedTasks(): Promise<DailyTask[]> {
+    try {
+      const tasks = await getData('accomplished_tasks') || [];
+      return tasks;
+    } catch (error) {
+      console.error('Error fetching accomplished tasks:', error);
+      return [];
+    }
+  }
+
+
   async getUnfinishedGoals(): Promise<(Goal & { archivedAt: string; originalPeriod: string })[]> {
     try {
       const stored = await getData('unfinished_goals');
 
       if (!Array.isArray(stored)) {
-        console.log('No unfinished goals found or invalid data format');
         return [];
       }
 
-      const validGoals = stored.filter((item): item is (Goal & { archivedAt: string; originalPeriod: string }) => {
-        return item &&
-               typeof item === 'object' &&
-               typeof item.id === 'string' &&
-               typeof item.title === 'string' &&
-               typeof item.type === 'string' &&
-               typeof item.archivedAt === 'string' &&
-               typeof item.originalPeriod === 'string';
-      });
-
-      return validGoals;
+      return stored.filter((item): item is Goal & { archivedAt: string; originalPeriod: string } =>
+        item && typeof item === 'object' && !item.isCompleted
+      );
     } catch (error) {
       console.error('Error fetching unfinished goals:', error);
       return [];
@@ -1117,6 +966,15 @@ class TaskService {
   /**
    * Create sample unfinished data for testing (development only)
    */
+  async getAllData(): Promise<any> {
+    const habits = await this.getHabits();
+    const tasks = await this.getDailyTasks();
+    const goals = await this.getGoals();
+    const unfinishedTasks = await this.getUnfinishedTasks();
+    const unfinishedGoals = await this.getUnfinishedGoals();
+    return { habits, tasks, goals, unfinishedTasks, unfinishedGoals };
+  }
+
   async createSampleUnfinishedData(): Promise<void> {
     if (!__DEV__) return; // Only run in development
 

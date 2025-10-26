@@ -30,6 +30,7 @@ import { ExperienceDetailModal } from "../components/ExperienceDetailModal";
 import { DurationTrendChart } from "../components/DurationTrendChart";
 import { CompactTagDistribution } from "../components/CompactTagDistribution";
 import { TagSelectionModal, TagModalMode } from "../components/TagSelectionModal";
+import { taskService } from "../services/taskService";
 
 const INITIAL_TIMER = "0 MINUTES";
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -64,6 +65,13 @@ export const HomeScreen = () => {
   const [tagModalMode, setTagModalMode] = useState<TagModalMode>("start");
   const [pendingTag, setPendingTag] = useState<string | null>(null);
 
+  const welcomeMessage = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning! ☀️";
+    if (hour < 18) return "Good afternoon! 🌤️";
+    return "Good evening! 🌙";
+  }, []);
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const stateAnim = useRef(new Animated.Value(0)).current;
 
@@ -76,6 +84,18 @@ export const HomeScreen = () => {
     const friendlyMessage = `${baseMessage} If the issue continues, please check your connection or free up storage and try again.`;
     setErrorMessage(friendlyMessage);
   }, []);
+
+  useEffect(() => {
+    const archiveTasks = async () => {
+      try {
+        await taskService.archiveAllUnfinishedItems();
+      } catch (error) {
+        handleError(error, "Failed to archive tasks.");
+      }
+    };
+
+    archiveTasks();
+  }, [handleError]);
 
   const refreshState = useCallback(
     async ({ silent, isPullRefresh }: RefreshOptions = {}) => {
@@ -366,8 +386,8 @@ export const HomeScreen = () => {
           </View>
         ) : null}
         <View style={styles.header}>
-          <Text style={styles.greeting}>Hi Dude! 👋</Text>
-          <Text style={styles.subtitle}>Build your 1% better self</Text>
+          <Text style={styles.greeting}>{welcomeMessage}</Text>
+          <Text style={styles.subtitle}>Ready to build your 1% better self?</Text>
         </View>
 
         <View style={styles.actionCard}>
