@@ -540,7 +540,7 @@ class TaskService {
   /**
    * Archive unfinished daily tasks (called on app start)
    */
-  async archiveUnfinishedDailyTasks(): Promise<number> {
+  async archiveAccomplishedDailyTasks(): Promise<number> {
     try {
       const now = new Date();
       const today = now.toDateString();
@@ -584,7 +584,7 @@ class TaskService {
   /**
    * Archive unfinished weekly goals (called on app start)
    */
-  async archiveUnfinishedWeeklyGoals(): Promise<number> {
+  async archiveAccomplishedWeeklyGoals(): Promise<number> {
     try {
       const now = new Date();
       const storedGoals = await getData('goals');
@@ -636,7 +636,7 @@ class TaskService {
   /**
    * Archive unfinished yearly goals (called on app start)
    */
-  async archiveUnfinishedMonthlyGoals(): Promise<number> {
+  async archiveAccomplishedMonthlyGoals(): Promise<number> {
     try {
       const now = new Date();
       const storedGoals = await getData('goals');
@@ -676,7 +676,7 @@ class TaskService {
     }
   }
 
-  async archiveUnfinishedYearlyGoals(): Promise<number> {
+  async archiveAccomplishedYearlyGoals(): Promise<number> {
     try {
       const now = new Date();
       const storedGoals = await getData('goals');
@@ -728,12 +728,12 @@ class TaskService {
   /**
    * Archive all unfinished items (comprehensive method)
    */
-  async archiveAllUnfinishedItems(): Promise<{ tasks: number; weeklyGoals: number; monthlyGoals: number; yearlyGoals: number }> {
+  async archiveAllAccomplishedItems(): Promise<{ tasks: number; weeklyGoals: number; monthlyGoals: number; yearlyGoals: number }> {
     const results = {
-      tasks: await this.archiveUnfinishedDailyTasks(),
-      weeklyGoals: await this.archiveUnfinishedWeeklyGoals(),
-      monthlyGoals: await this.archiveUnfinishedMonthlyGoals(),
-      yearlyGoals: await this.archiveUnfinishedYearlyGoals(),
+      tasks: await this.archiveAccomplishedDailyTasks(),
+      weeklyGoals: await this.archiveAccomplishedWeeklyGoals(),
+      monthlyGoals: await this.archiveAccomplishedMonthlyGoals(),
+      yearlyGoals: await this.archiveAccomplishedYearlyGoals(),
     };
     return results;
   }

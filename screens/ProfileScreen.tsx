@@ -25,10 +25,10 @@ interface LocalProfile {
 
 const PROFILE_STORAGE_KEY = "profile_data";
 
-import { StackNavigationProp } from '@react-navigation/stack';
-import { ProfileStackParamList } from '../navigation/AppNavigator';
+import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import { RootTabParamList } from '../navigation/AppNavigator';
 
-type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'ProfileHome'>;
+type ProfileScreenNavigationProp = BottomTabNavigationProp<RootTabParamList, 'Profile'>;
 
 type Props = {
   navigation: ProfileScreenNavigationProp;
@@ -351,7 +351,7 @@ export const ProfileScreen: FC<Props> = ({ navigation }) => {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>App Settings</Text>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Wishlist')}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Profile', { screen: 'Wishlist' })}>
           <Text style={styles.menuText}>Future Purchases & Wishlist</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
@@ -371,7 +371,7 @@ export const ProfileScreen: FC<Props> = ({ navigation }) => {
           <Text style={styles.menuText}>Income & Expense History</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={goToUnfinishedTasks}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Profile', { screen: 'ProfileUnfinishedTasks', params: { type: 'tasks' } })}>
           <View style={styles.menuLabelRow}>
             <Text style={styles.menuText}>Unfinished Tasks</Text>
             {unfinishedCount > 0 && (
@@ -382,11 +382,11 @@ export const ProfileScreen: FC<Props> = ({ navigation }) => {
           </View>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('ProfileAccomplishedTasks')}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Profile', { screen: 'ProfileAccomplishedTasks' })}>
           <Text style={styles.menuText}>Accomplished Tasks</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.menuItem} onPress={goToUnfinishedGoals}>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Profile', { screen: 'ProfileUnfinishedGoals', params: { type: 'goals' } })}>
           <View style={styles.menuLabelRow}>
             <Text style={styles.menuText}>Unfinished Goals</Text>
             {unfinishedGoalsCount > 0 && (
