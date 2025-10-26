@@ -54,19 +54,19 @@ export const ExperienceModal: FC<ExperienceModalProps> = ({
         Animated.timing(backdropOpacity, {
           toValue: 1,
           duration: 200,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.spring(scale, {
           toValue: 1,
           damping: 18,
           stiffness: 180,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.spring(translateY, {
           toValue: 0,
           damping: 18,
           stiffness: 180,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
       return;
@@ -76,17 +76,17 @@ export const ExperienceModal: FC<ExperienceModalProps> = ({
       Animated.timing(backdropOpacity, {
         toValue: 0,
         duration: 150,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(scale, {
         toValue: 0.95,
         duration: 150,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(translateY, {
         toValue: 40,
         duration: 150,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start(({ finished }) => {
       if (finished) {
@@ -110,7 +110,7 @@ export const ExperienceModal: FC<ExperienceModalProps> = ({
           <Pressable style={styles.flex} onPress={onCancel} />
         </Animated.View>
 
-        <View style={styles.centerContent} pointerEvents="box-none">
+        <View style={[styles.centerContent, { pointerEvents: 'box-none' }]}>
           <Animated.View
             style={[styles.card, { transform: [{ scale }, { translateY }] }]}
           >
@@ -188,10 +188,7 @@ const styles = StyleSheet.create({
     borderRadius: radii.lg,
     padding: spacing.xl,
     gap: spacing.lg,
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 12 },
-    shadowRadius: 24,
+    boxShadow: '0px 12px 24px rgba(0, 0, 0, 0.12)',
     elevation: 12,
   },
   scrollContent: {
@@ -235,10 +232,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 12,
+    boxShadow: `0px 6px 12px ${colors.primary}35`,
     elevation: 5,
   },
   buttonPressed: {

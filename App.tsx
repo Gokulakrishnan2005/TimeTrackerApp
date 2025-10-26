@@ -19,6 +19,8 @@ import { CircularTabBar } from './components/CircularTabBar';
 import ChangePasswordScreen from './screens/ChangePasswordScreen';
 import NotificationsScreen from './screens/NotificationsScreen';
 import SpendingHistoryScreen from './screens/SpendingHistoryScreen';
+import UnfinishedTasksScreen from './screens/UnfinishedTasksScreen';
+import taskService from './services/taskService';
 
 // Navigation types
 export type RootStackParamList = {
@@ -44,6 +46,16 @@ const ProfileNavigator = () => {
       <ProfileStack.Screen name="ProfileChangePassword" component={ChangePasswordScreen} />
       <ProfileStack.Screen name="ProfileNotifications" component={NotificationsScreen} />
       <ProfileStack.Screen name="ProfileSpendingHistory" component={SpendingHistoryScreen} />
+      <ProfileStack.Screen
+        name="ProfileUnfinishedTasks"
+        component={UnfinishedTasksScreen}
+        options={{ headerShown: true, title: 'Unfinished Tasks' }}
+      />
+      <ProfileStack.Screen
+        name="ProfileUnfinishedGoals"
+        component={UnfinishedTasksScreen}
+        options={{ headerShown: true, title: 'Unfinished Goals' }}
+      />
     </ProfileStack.Navigator>
   );
 };
@@ -107,6 +119,26 @@ export const getData = async (key: string) => {
 export default function App() {
   useEffect(() => {
     const initSampleData = async () => {
+      // DISABLED: Auto-archiving of expired tasks and goals
+      // Tasks and goals will now stay in main lists even after their periods end
+      /*
+      try {
+        console.log('Starting auto-archiving process...');
+        const archivedCounts = await taskService.archiveAllUnfinishedItems();
+        const totalArchived = archivedCounts.tasks + archivedCounts.weeklyGoals + archivedCounts.yearlyGoals;
+
+        if (totalArchived > 0) {
+          console.log(`✅ Auto-archiving complete: ${archivedCounts.tasks} tasks, ${archivedCounts.weeklyGoals} weekly goals, ${archivedCounts.yearlyGoals} yearly goals archived`);
+        } else {
+          console.log('ℹ️ Auto-archiving complete: No items needed archiving');
+        }
+      } catch (error) {
+        console.error('❌ Error during auto-archiving:', error);
+        console.log('This error might be due to invalid data format or date issues when testing with changed system dates');
+      }
+      */
+
+      await taskService.carryOverTasks();
       const hasData = await getData('initialized');
       if (!hasData) {
         await storeData('timeEntries', [

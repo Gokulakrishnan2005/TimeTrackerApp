@@ -15,6 +15,17 @@
 const Session = require('../models/Session');
 const { createError, asyncHandler } = require('../middleware/errorHandler');
 
+const normalizeTag = (tag) => {
+  if (typeof tag !== 'string') {
+    return null;
+  }
+  const trimmed = tag.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, 50);
+};
+
 /**
  * Start a new session
  * POST /api/sessions/start
@@ -23,6 +34,8 @@ const { createError, asyncHandler } = require('../middleware/errorHandler');
  * @access Private (requires authentication)
  */
 const startSession = asyncHandler(async (req, res) => {
+  const { tag } = req.body || {};
+
   // Check if user already has an active session
   const activeSession = await Session.findActiveSession(req.user._id);
 
@@ -43,7 +56,8 @@ const startSession = asyncHandler(async (req, res) => {
     userId: req.user._id,
     sessionNumber: nextNumber,
     startDateTime: new Date(),
-    status: 'active'
+    status: 'active',
+    tag: normalizeTag(tag)
   });
 
   // Save session to database
@@ -69,7 +83,7 @@ const startSession = asyncHandler(async (req, res) => {
  */
 const stopSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { experience } = req.body;
+  const { experience, tag } = req.body || {};
 
   // Find the session
   const session = await Session.findById(id);
@@ -89,7 +103,7 @@ const stopSession = asyncHandler(async (req, res) => {
   }
 
   // Complete the session with experience notes
-  await session.completeSession(experience || '');
+  await session.completeSession(experience || '', tag !== undefined ? normalizeTag(tag) : undefined);
 
   res.json({
     success: true,
@@ -198,7 +212,7 @@ const getActiveSession = asyncHandler(async (req, res) => {
  */
 const updateSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { experience } = req.body;
+  const { experience, tag } = req.body || {};
 
   // Find the session
   const session = await Session.findById(id);
@@ -215,6 +229,10 @@ const updateSession = asyncHandler(async (req, res) => {
   // Update experience notes if provided
   if (experience !== undefined) {
     session.experience = experience.trim();
+  }
+
+  if (tag !== undefined) {
+    session.tag = normalizeTag(tag);
   }
 
   // Save updated session

@@ -79,31 +79,19 @@ export const radii = {
 
 export const shadows = {
   card: {
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 8,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
     elevation: 3,
   },
   cardHover: {
-    shadowColor: "#000",
-    shadowOpacity: 0.12,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 16,
+    boxShadow: '0px 4px 16px rgba(0, 0, 0, 0.12)',
     elevation: 6,
   },
   button: {
-    shadowColor: colors.primary,
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: `0px 4px 12px ${colors.primary}4D`,
     elevation: 5,
   },
   floating: {
-    shadowColor: "#000",
-    shadowOpacity: 0.15,
-    shadowOffset: { width: 0, height: 8 },
-    shadowRadius: 24,
+    boxShadow: '0px 8px 24px rgba(0, 0, 0, 0.15)',
     elevation: 10,
   },
 };
@@ -119,7 +107,8 @@ export const layout = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: radii.md,
     padding: spacing.lg,
-    ...shadows.card,
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.08)',
+    elevation: 3,
   },
   primaryButton: {
     backgroundColor: colors.primary,

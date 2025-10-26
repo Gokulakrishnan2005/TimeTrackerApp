@@ -33,12 +33,14 @@ const deserializeSession = (payload: any): Session => {
     startDateTime: payload?.startDateTime ? new Date(payload.startDateTime) : new Date(),
     endDateTime: payload?.endDateTime ? new Date(payload.endDateTime) : null,
     experience: typeof payload?.experience === "string" ? payload.experience : "",
+    tag: typeof payload?.tag === "string" && payload.tag.trim().length ? payload.tag.trim() : null,
     status: payload?.status === "completed" ? "completed" : "active",
   });
 };
 
 const serializeSession = (session: Session) => ({
   ...session,
+  tag: session.tag,
   startDateTime: session.startDateTime.toISOString(),
   endDateTime: session.endDateTime ? session.endDateTime.toISOString() : null,
 });
@@ -53,6 +55,7 @@ const buildSeedSessions = (): Session[] => {
       startDateTime: new Date(base.getTime() - 2 * 60 * 60 * 1000),
       endDateTime: new Date(base.getTime() - 1.5 * 60 * 60 * 1000),
       experience: "Kickoff planning session.",
+      tag: "Work",
       status: "completed",
     }),
     createSession({
@@ -61,6 +64,7 @@ const buildSeedSessions = (): Session[] => {
       startDateTime: new Date(base.getTime() - 24 * 60 * 60 * 1000),
       endDateTime: new Date(base.getTime() - 23.3 * 60 * 60 * 1000),
       experience: "Focused work on key tasks.",
+      tag: "Study",
       status: "completed",
     }),
   ];
@@ -120,7 +124,7 @@ export const saveSession = async (session: Session): Promise<void> => {
   await persistSessions(sessions);
 };
 
-export const startNewSession = async (): Promise<Session> => {
+export const startNewSession = async (tag?: string | null): Promise<Session> => {
   const sessions = await ensureSessionArray();
   const { lastSessionNumber } = await getMetadata();
 
@@ -134,6 +138,7 @@ export const startNewSession = async (): Promise<Session> => {
     id: generateId(),
     sessionNumber: nextNumber,
     startDateTime: new Date(),
+    tag: tag && tag.trim().length ? tag.trim() : null,
     status: "active",
   });
 
@@ -146,7 +151,8 @@ export const startNewSession = async (): Promise<Session> => {
 
 export const stopSession = async (
   sessionId: string,
-  experienceText: string
+  experienceText: string,
+  tag?: string | null
 ): Promise<Session> => {
   const sessions = await ensureSessionArray();
   const index = sessions.findIndex((item) => item.id === sessionId);
@@ -157,7 +163,8 @@ export const stopSession = async (
   const completed = completeSession(
     sessions[index],
     new Date(),
-    experienceText.trim()
+    experienceText.trim(),
+    tag
   );
 
   sessions[index] = completed;
@@ -178,14 +185,19 @@ export const getTotalDurationMs = async (): Promise<number> => {
 
 export const updateSessionExperience = async (
   sessionId: string,
-  experienceText: string
+  experienceText: string,
+  tag?: string | null
 ): Promise<Session | null> => {
   const sessions = await ensureSessionArray();
   const index = sessions.findIndex((item) => item.id === sessionId);
   if (index === -1) {
     return null;
   }
-  const updated = { ...sessions[index], experience: experienceText.trim() };
+  const updated: Session = {
+    ...sessions[index],
+    experience: experienceText.trim(),
+    tag: tag === undefined ? sessions[index].tag : tag && tag.trim().length ? tag.trim() : null,
+  };
   sessions[index] = updated;
   await persistSessions(sessions);
   return updated;

@@ -24,7 +24,14 @@
       "package": "com.gokulakrishnan05.TimeTrackerApp"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "name": "TimeTrackerApp",
+      "shortName": "TimeTracker",
+      "lang": "en",
+      "scope": "./",
+      "themeColor": "#475569",
+      "backgroundColor": "#ffffff",
+      "display": "standalone"
     },
     "extra": {
       "API_HOST": "auto",

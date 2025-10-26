@@ -10,10 +10,12 @@ import {
   Alert,
   ActivityIndicator,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
 import { storeData, getData } from "../services/LocalStorage";
 import { exportAppDataToCsv, importAppDataFromCsv } from "../services/dataTransferService";
+import taskService from "../services/taskService";
 
 interface LocalProfile {
   name: string;
@@ -24,7 +26,13 @@ interface LocalProfile {
 
 const PROFILE_STORAGE_KEY = "profile_data";
 
+import { StackNavigationProp } from '@react-navigation/stack';
+import { ProfileStackParamList } from '../navigation/AppNavigator';
+
+type ProfileScreenNavigationProp = StackNavigationProp<ProfileStackParamList, 'ProfileHome'>;
+
 export const ProfileScreen: FC = () => {
+  const navigation = useNavigation<ProfileScreenNavigationProp>();
   const [isEditing, setIsEditing] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [profile, setProfile] = React.useState<LocalProfile>({
@@ -57,6 +65,27 @@ export const ProfileScreen: FC = () => {
     };
     loadProfile();
   }, []);
+
+  const [unfinishedCount, setUnfinishedCount] = React.useState(0);
+  const [unfinishedGoalsCount, setUnfinishedGoalsCount] = React.useState(0);
+
+  React.useEffect(() => {
+    const loadUnfinished = async () => {
+      try {
+        const tasks = await taskService.getUnfinishedTasks();
+        const goals = await taskService.getUnfinishedGoals();
+        setUnfinishedCount(tasks.length);
+        setUnfinishedGoalsCount(goals.length);
+      } catch (error) {
+        setUnfinishedCount(0);
+        setUnfinishedGoalsCount(0);
+      }
+    };
+
+    const unsubscribe = navigation.addListener('focus', loadUnfinished);
+    loadUnfinished();
+    return unsubscribe;
+  }, [navigation]);
 
   React.useEffect(() => {
     if (!isEditing) {
@@ -147,15 +176,29 @@ export const ProfileScreen: FC = () => {
 
   const handleOpenNotifications = () => {
     Alert.alert(
-      "Notifications",
-      "Configure reminders in your device settings for now. In-app scheduling is planned."
+      "Coming Soon",
+      "Notification settings will be available in a future update."
     );
   };
 
   const goToIncomeExpenseHistory = () => {
     Alert.alert(
-      "Spending History",
-      "View your income and expense details from the Finance tab."
+      "Coming Soon",
+      "Income & expense history will be available in a future update."
+    );
+  };
+
+  const goToUnfinishedTasks = () => {
+    Alert.alert(
+      "Coming Soon",
+      "Unfinished tasks screen will be available in a future update."
+    );
+  };
+
+  const goToUnfinishedGoals = () => {
+    Alert.alert(
+      "Coming Soon",
+      "Unfinished goals screen will be available in a future update."
     );
   };
 
@@ -175,6 +218,15 @@ export const ProfileScreen: FC = () => {
       }
     } catch (error: any) {
       Alert.alert("Export Failed", error?.message ?? "Please try again.");
+    }
+  };
+
+  const handleCreateSampleData = async () => {
+    try {
+      await taskService.createSampleUnfinishedData();
+      Alert.alert('Success', 'Sample unfinished data created! Check the Unfinished Tasks/Goals screens.');
+    } catch (error) {
+      Alert.alert('Error', 'Failed to create sample data');
     }
   };
 
@@ -216,6 +268,10 @@ export const ProfileScreen: FC = () => {
           <View style={styles.headerChip}>
             <Text style={styles.headerChipLabel}>Status</Text>
             <Text style={styles.headerChipValue}>Active</Text>
+          </View>
+          <View style={styles.headerChip}>
+            <Text style={styles.headerChipLabel}>Unfinished tasks</Text>
+            <Text style={[styles.headerChipValue, unfinishedCount > 0 && styles.warningText]}>{unfinishedCount}</Text>
           </View>
         </View>
       </View>
@@ -286,6 +342,10 @@ export const ProfileScreen: FC = () => {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>App Settings</Text>
+        <TouchableOpacity style={styles.menuItem} onPress={() => navigation.navigate('Wishlist')}>
+          <Text style={styles.menuText}>Future Purchases & Wishlist</Text>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.menuItem} onPress={handleOpenNotifications}>
           <Text style={styles.menuText}>Notifications</Text>
           <Text style={styles.menuArrow}>›</Text>
@@ -302,6 +362,34 @@ export const ProfileScreen: FC = () => {
           <Text style={styles.menuText}>Income & Expense History</Text>
           <Text style={styles.menuArrow}>›</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={goToUnfinishedTasks}>
+          <View style={styles.menuLabelRow}>
+            <Text style={styles.menuText}>Unfinished Tasks</Text>
+            {unfinishedCount > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{unfinishedCount}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.menuItem} onPress={goToUnfinishedGoals}>
+          <View style={styles.menuLabelRow}>
+            <Text style={styles.menuText}>Unfinished Goals</Text>
+            {unfinishedGoalsCount > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{unfinishedGoalsCount}</Text>
+              </View>
+            )}
+          </View>
+          <Text style={styles.menuArrow}>›</Text>
+        </TouchableOpacity>
+        {__DEV__ && (
+          <TouchableOpacity style={styles.menuItem} onPress={handleCreateSampleData}>
+            <Text style={styles.menuText}>Create Sample Data (Dev)</Text>
+            <Text style={styles.menuArrow}>›</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.sectionCard}>
@@ -399,6 +487,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     fontWeight: "600",
   },
+  warningText: {
+    color: "#DC2626",
+  },
   sectionCard: {
     backgroundColor: colors.surface,
     borderRadius: radii.xl,
@@ -464,9 +555,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   menuItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     backgroundColor: colors.background,
@@ -477,15 +568,32 @@ const styles = StyleSheet.create({
   menuText: {
     ...typography.body,
     color: colors.textPrimary,
-    fontWeight: '600',
   },
   menuArrow: {
-    ...typography.body,
+    ...typography.heading,
     color: colors.textSecondary,
   },
   menuValue: {
     ...typography.body,
     color: colors.textSecondary,
+  },
+  menuLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  countBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: "#DC2626",
+  },
+  countBadgeText: {
+    ...typography.caption,
+    color: "#DC2626",
+    fontWeight: "600",
   },
   aboutCard: {
     borderRadius: radii.lg,

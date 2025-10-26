@@ -28,9 +28,10 @@ interface Habit {
 interface DailyTask {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   isCompleted: boolean;
   date: string;
+  isExpired?: boolean;
 }
 
 interface Goal {
@@ -44,6 +45,7 @@ interface Goal {
   progress: number;
   isCompleted: boolean;
   imageUrl?: string | null;
+  isExpired?: boolean;
 }
 
 const TasksScreen: React.FC = () => {
@@ -100,24 +102,52 @@ interface GoalCardProps {
 }
 
 const GoalCard: React.FC<GoalCardProps> = ({ goal, onIncrement, loading, onSelectVision, selectedForVision }) => {
+  const isExpired = goal.isExpired;
+
   return (
-    <View style={styles.goalCard}>
+    <View style={[styles.goalCard, isExpired && styles.goalCardExpired]}>
       <View style={styles.goalCardHeader}>
-        <Text style={styles.goalCardTitle} numberOfLines={2}>{goal.title}</Text>
-        <View style={[styles.goalTypePill, goal.type === 'weekly' ? styles.goalTypeWeekly : goal.type === 'monthly' ? styles.goalTypeMonthly : styles.goalTypeYearly]}>
-          <Text style={styles.goalTypePillText}>{goal.type.toUpperCase()}</Text>
+        <Text style={[styles.goalCardTitle, isExpired && styles.goalCardTitleExpired]} numberOfLines={2}>
+          {goal.title}
+        </Text>
+        <View style={[
+          styles.goalTypePill,
+          goal.type === 'weekly' ? styles.goalTypeWeekly :
+          goal.type === 'monthly' ? styles.goalTypeMonthly : styles.goalTypeYearly,
+          isExpired && styles.goalTypePillExpired
+        ]}>
+          <Text style={[styles.goalTypePillText, isExpired && styles.goalTypePillTextExpired]}>
+            {isExpired ? 'EXPIRED' : goal.type.toUpperCase()}
+          </Text>
         </View>
       </View>
-      {goal.description ? <Text style={styles.goalCardDescription} numberOfLines={2}>{goal.description}</Text> : null}
+      {goal.description ? (
+        <Text style={[styles.goalCardDescription, isExpired && styles.goalCardDescriptionExpired]} numberOfLines={2}>
+          {goal.description}
+        </Text>
+      ) : null}
       <View style={styles.goalProgressBar}>
-        <View style={[styles.goalProgressFill, { width: `${goal.progress}%` }, goal.isCompleted && styles.goalProgressComplete]} />
+        <View style={[
+          styles.goalProgressFill,
+          { width: `${goal.progress}%` },
+          goal.isCompleted && styles.goalProgressComplete,
+          isExpired && styles.goalProgressExpired
+        ]} />
       </View>
       <View style={styles.goalCardStats}>
-        <Text style={styles.goalProgressLabel}>{goal.currentValue}/{goal.targetValue} {goal.unit}</Text>
-        <Text style={[styles.goalProgressPercent, goal.isCompleted && styles.goalProgressPercentComplete]}>{goal.progress}%</Text>
+        <Text style={[styles.goalProgressLabel, isExpired && styles.goalProgressLabelExpired]}>
+          {goal.currentValue}/{goal.targetValue} {goal.unit}
+        </Text>
+        <Text style={[
+          styles.goalProgressPercent,
+          goal.isCompleted && styles.goalProgressPercentComplete,
+          isExpired && styles.goalProgressPercentExpired
+        ]}>
+          {goal.progress}%
+        </Text>
       </View>
       <View style={styles.goalCardActions}>
-        {!goal.isCompleted && (
+        {!goal.isCompleted && !isExpired && (
           <TouchableOpacity
             style={[styles.goalIncrementButton, loading && styles.goalIncrementButtonDisabled]}
             onPress={onIncrement}
@@ -308,19 +338,37 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onIncrement, loading, onSelec
               dailyTasks.map((task) => (
                 <TouchableOpacity
                   key={task.id}
-                  style={[styles.taskRow, task.isCompleted && styles.taskRowCompleted]}
+                  style={[
+                    styles.taskRow,
+                    task.isCompleted && styles.taskRowCompleted,
+                    task.isExpired && styles.taskRowExpired
+                  ]}
                   onPress={() => handleToggleTask(task.id)}
                 >
                   <TouchableOpacity
-                    style={[styles.taskCheckbox, task.isCompleted && styles.taskCheckboxCompleted]}
+                    style={[
+                      styles.taskCheckbox,
+                      task.isCompleted && styles.taskCheckboxCompleted,
+                      task.isExpired && styles.taskCheckboxExpired
+                    ]}
                     onPress={() => handleToggleTask(task.id)}
                   >
                     {task.isCompleted && <Text style={styles.checkmark}>✓</Text>}
                   </TouchableOpacity>
                   <View style={styles.taskInfo}>
-                    <Text style={[styles.taskTitle, task.isCompleted && styles.taskTitleCompleted]}>{task.title}</Text>
+                    <Text style={[
+                      styles.taskTitle,
+                      task.isCompleted && styles.taskTitleCompleted,
+                      task.isExpired && styles.taskTitleExpired
+                    ]}>
+                      {task.title}
+                    </Text>
                     {task.description ? (
-                      <Text style={[styles.taskDescription, task.isCompleted && styles.taskDescriptionCompleted]}>
+                      <Text style={[
+                        styles.taskDescription,
+                        task.isCompleted && styles.taskDescriptionCompleted,
+                        task.isExpired && styles.taskDescriptionExpired
+                      ]}>
                         {task.description}
                       </Text>
                     ) : null}
@@ -485,13 +533,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   loadingText: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textSecondary,
   },
   title: {
-    ...typography.display,
-    color: colors.textPrimary,
+    fontSize: 40,
+    lineHeight: 48,
     fontWeight: '800',
+    color: colors.textPrimary,
+    letterSpacing: -0.5,
   },
   summaryCardWrapper: {
     backgroundColor: colors.surface,
@@ -507,15 +559,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryHeroLabel: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
     textTransform: 'uppercase',
     fontWeight: '600',
   },
   summaryHeroDate: {
-    ...typography.heading,
-    color: colors.textPrimary,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: '700',
+    color: colors.textPrimary,
   },
   quickAddButton: {
     width: 44,
@@ -550,13 +606,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   statLabel: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   statValue: {
-    ...typography.heading,
-    color: colors.textPrimary,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: '700',
+    color: colors.textPrimary,
   },
   checkmark: {
     color: colors.surface,
@@ -571,9 +632,10 @@ const styles = StyleSheet.create({
     gap: spacing.md,
   },
   sectionLabel: {
-    ...typography.heading,
-    color: colors.textPrimary,
+    fontSize: 28,
+    lineHeight: 36,
     fontWeight: '700',
+    color: colors.textPrimary,
   },
   emptyState: {
     alignItems: 'center',
@@ -584,17 +646,23 @@ const styles = StyleSheet.create({
     fontSize: 36,
   },
   emptyTitle: {
-    ...typography.heading,
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: '700',
     color: colors.textPrimary,
   },
   emptySubtitle: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textSecondary,
     textAlign: 'center',
     maxWidth: 260,
   },
   emptyInline: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textSecondary,
   },
   habitRow: {
@@ -629,7 +697,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   habitName: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textPrimary,
     fontWeight: '600',
   },
@@ -638,8 +708,12 @@ const styles = StyleSheet.create({
     color: '#22C55E',
   },
   habitMeta: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: '#F59E0B',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     marginTop: 2,
   },
   taskRow: {
@@ -673,7 +747,9 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   taskTitle: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textPrimary,
     fontWeight: '600',
   },
@@ -682,11 +758,27 @@ const styles = StyleSheet.create({
     color: '#22C55E',
   },
   taskDescription: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
-  taskDescriptionCompleted: {
-    color: '#15803D',
+  taskRowExpired: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+    opacity: 0.8,
+  },
+  taskCheckboxExpired: {
+    borderColor: '#F59E0B',
+    backgroundColor: '#FEF3C7',
+  },
+  taskTitleExpired: {
+    color: '#92400E',
+  },
+  taskDescriptionExpired: {
+    color: '#78350F',
   },
   goalScroller: {
     gap: spacing.md,
@@ -710,16 +802,17 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   goalCardTitle: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textPrimary,
-    fontWeight: '600',
     flex: 1,
   },
   goalTypePill: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
     borderRadius: radii.pill,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: '#47556912', // Primary color with 12% opacity
   },
   goalTypeWeekly: {
     backgroundColor: '#DBEAFE',
@@ -731,13 +824,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#DCFCE7',
   },
   goalTypePillText: {
-    ...typography.caption,
-    fontWeight: '700',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textPrimary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   goalCardDescription: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
   },
   goalProgressBar: {
     height: 8,
@@ -759,13 +859,47 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   goalProgressLabel: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     fontWeight: '600',
   },
   goalProgressPercent: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.primary,
+    fontWeight: '700',
+  },
+  goalCardExpired: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#F59E0B',
+    opacity: 0.8,
+  },
+  goalCardTitleExpired: {
+    color: '#92400E',
+  },
+  goalTypePillExpired: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#F59E0B',
+  },
+  goalTypePillTextExpired: {
+    color: '#92400E',
+    fontWeight: '700',
+  },
+  goalCardDescriptionExpired: {
+    color: '#78350F',
+  },
+  goalProgressExpired: {
+    backgroundColor: '#F59E0B',
+    opacity: 0.6,
+  },
+  goalProgressPercentExpired: {
+    color: '#92400E',
     fontWeight: '700',
   },
   goalProgressPercentComplete: {
@@ -786,7 +920,9 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   goalIncrementText: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.surface,
     fontWeight: '700',
   },
@@ -800,11 +936,15 @@ const styles = StyleSheet.create({
   },
   visionSelectButtonActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: '#47556912', // Primary color with 12% opacity
   },
   visionSelectText: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     fontWeight: '600',
   },
   visionSelectTextActive: {
@@ -831,11 +971,15 @@ const styles = StyleSheet.create({
   },
   visionGoalChipActive: {
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '12',
+    backgroundColor: '#47556912', // Primary color with 12% opacity
   },
   visionGoalChipText: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textSecondary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     fontWeight: '600',
   },
   visionGoalChipTextActive: {
@@ -854,7 +998,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     backgroundColor: colors.background,
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.textPrimary,
   },
   visionAddButton: {
@@ -864,7 +1010,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
   },
   visionAddButtonText: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: colors.surface,
     fontWeight: '700',
   },
@@ -886,8 +1034,12 @@ const styles = StyleSheet.create({
     height: 80,
   },
   visionCaption: {
-    ...typography.caption,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
     color: colors.textPrimary,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
     padding: spacing.sm,
   },
   quickBar: {
@@ -909,16 +1061,15 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderRadius: radii.pill,
     elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
+    boxShadow: '0px 2px 6px rgba(0, 0, 0, 0.2)',
   },
   quickButtonDisabled: {
     opacity: 0.6,
   },
   quickButtonText: {
-    ...typography.body,
+    fontSize: 16,
+    lineHeight: 24,
+    fontWeight: '400',
     color: '#FFFFFF',
     fontWeight: '700',
   },
@@ -932,10 +1083,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
   },
   fabText: {
     fontSize: 24,

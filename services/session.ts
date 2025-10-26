@@ -7,6 +7,7 @@ export interface Session {
   endDateTime: Date | null;
   duration: number;
   experience: string;
+  tag: string | null;
   status: SessionStatus;
 }
 
@@ -32,11 +33,13 @@ export function createSession(params: {
   startDateTime: Date;
   endDateTime?: Date | null;
   experience?: string;
+  tag?: string | null;
   status?: SessionStatus;
 }): Session {
   const endDateTime = params.endDateTime ?? null;
   const status = params.status ?? (endDateTime ? "completed" : "active");
   const duration = calculateDuration(params.startDateTime, endDateTime);
+  const normalizedTag = params.tag && params.tag.trim().length ? params.tag.trim() : null;
 
   return {
     id: params.id,
@@ -45,6 +48,7 @@ export function createSession(params: {
     endDateTime,
     duration,
     experience: params.experience ?? "",
+    tag: normalizedTag,
     status,
   };
 }
@@ -52,15 +56,20 @@ export function createSession(params: {
 export function completeSession(
   session: Session,
   endDateTime: Date,
-  experience: string
+  experience: string,
+  tag?: string | null
 ): Session {
   const duration = calculateDuration(session.startDateTime, endDateTime);
+  const normalizedTag = tag !== undefined
+    ? (tag && tag.trim().length ? tag.trim() : null)
+    : session.tag;
 
   return {
     ...session,
     endDateTime,
     duration,
     experience,
+    tag: normalizedTag,
     status: "completed",
   };
 }

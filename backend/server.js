@@ -29,6 +29,7 @@ const authRoutes = require('./routes/auth');
 const sessionRoutes = require('./routes/sessions');
 const financeRoutes = require('./routes/finance');
 const taskRoutes = require('./routes/tasks');
+const analyticsRoutes = require('./routes/analytics');
 
 // Initialize Express app
 const app = express();
@@ -120,6 +121,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/finance', financeRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Global error handling middleware
 // Must be placed after all routes

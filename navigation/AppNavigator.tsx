@@ -1,18 +1,19 @@
 import React from 'react';
 import { FC } from "react";
-import { View } from "react-native";
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { NavigationContainer } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { HomeScreen } from "../screens/HomeScreen";
-import { AnalyticsScreen } from "../screens/AnalyticsScreen";
 import TasksScreen from "../screens/TasksScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import FinanceScreen from '../screens/FinanceScreen';
 import AddQuickAction from '../screens/AddQuickAction';
-import { colors } from '../constants/colors';
 import { CircularTabBar } from '../components/CircularTabBar';
+import WishlistScreen from '../screens/WishlistScreen';
+import SpendingHistoryScreen from '../screens/SpendingHistoryScreen';
+import UnfinishedTasksScreen from '../screens/UnfinishedTasksScreen';
+import NotificationsScreen from '../screens/NotificationsScreen';
 
 export type RootTabParamList = {
   Home: undefined;
@@ -23,7 +24,76 @@ export type RootTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<RootTabParamList>();
-const Stack = createStackNavigator();
+
+export type ProfileStackParamList = {
+  ProfileHome: undefined;
+  Wishlist: undefined;
+  ProfileNotifications: undefined;
+  ProfileSpendingHistory: undefined;
+  ProfileUnfinishedTasks: { type: 'tasks' | 'goals' };
+  ProfileUnfinishedGoals: { type: 'tasks' | 'goals' };
+};
+
+const ProfileStack = createStackNavigator<ProfileStackParamList>();
+
+const ProfileStackNavigator: FC = () => {
+  return (
+    <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+      <ProfileStack.Screen name="ProfileHome" component={ProfileScreen} />
+      <ProfileStack.Screen
+        name="Wishlist"
+        component={WishlistScreen}
+        options={{
+          headerShown: true,
+          title: 'Future Purchases & Wishlist',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <ProfileStack.Screen
+        name="ProfileNotifications"
+        component={NotificationsScreen}
+        options={{
+          headerShown: true,
+          title: 'Notifications',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <ProfileStack.Screen
+        name="ProfileSpendingHistory"
+        component={SpendingHistoryScreen}
+        options={{
+          headerShown: true,
+          title: 'Spending History',
+          headerBackTitle: 'Back',
+        }}
+      />
+      <ProfileStack.Screen
+        name="ProfileUnfinishedTasks"
+        component={UnfinishedTasksScreen}
+        options={{
+          headerShown: true,
+          title: 'Unfinished Tasks',
+          headerBackTitle: 'Back',
+        }}
+      />
+       <ProfileStack.Screen
+        name="ProfileUnfinishedGoals"
+        component={UnfinishedTasksScreen}
+        options={{
+          headerShown: true,
+          title: 'Unfinished Goals',
+          headerBackTitle: 'Back',
+        }}
+      />
+    </ProfileStack.Navigator>
+  );
+}
+
+export type RootStackParamList = {
+  Main: undefined;
+};
+
+const Stack = createStackNavigator<RootStackParamList>();
 
 // Main tab navigator
 const MainTabNavigator: FC = () => {
@@ -38,7 +108,7 @@ const MainTabNavigator: FC = () => {
       <Tab.Screen name="Finance" component={FinanceScreen} />
       <Tab.Screen name="Add" component={AddQuickAction} />
       <Tab.Screen name="Tasks" component={TasksScreen} />
-      <Tab.Screen name="Profile" component={ProfileScreen} />
+      <Tab.Screen name="Profile" component={ProfileStackNavigator} />
     </Tab.Navigator>
   );
 };
@@ -52,7 +122,7 @@ export const AppNavigator: FC = () => {
           screenOptions={{
             headerShown: false,
           }}
-        >
+        >  
           <Stack.Screen name="Main" component={MainTabNavigator} />
         </Stack.Navigator>
       </NavigationContainer>

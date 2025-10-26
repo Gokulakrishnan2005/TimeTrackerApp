@@ -30,16 +30,16 @@ class SessionService {
     return await getActiveSession();
   }
 
-  async start(): Promise<SessionSnapshot> {
-    return await startNewSession();
+  async start(tag?: string | null): Promise<SessionSnapshot> {
+    return await startNewSession(tag);
   }
 
-  async stop(sessionId: string, notes: string): Promise<SessionSnapshot> {
-    return await stopSession(sessionId, notes);
+  async stop(sessionId: string, notes: string, tag?: string | null): Promise<SessionSnapshot> {
+    return await stopSession(sessionId, notes, tag);
   }
 
-  async updateNotes(sessionId: string, notes: string): Promise<SessionSnapshot | null> {
-    return await updateSessionExperience(sessionId, notes);
+  async updateNotes(sessionId: string, notes: string, tag?: string | null): Promise<SessionSnapshot | null> {
+    return await updateSessionExperience(sessionId, notes, tag);
   }
 
   async remove(sessionId: string): Promise<boolean> {

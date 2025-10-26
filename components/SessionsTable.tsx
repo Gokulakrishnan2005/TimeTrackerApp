@@ -9,18 +9,20 @@ import {
 } from "react-native";
 import { colors } from "../constants/colors";
 import { radii, spacing, typography } from "../constants/theme";
+import { resolveTagColor, resolveTagLabel } from "../constants/sessionTags";
 import { formatDateTime } from "../utils/time";
 import { Session } from "../services/session";
 
-const truncateText = (text: string, limit = 40): string =>
+const truncateText = (text: string, limit = 25): string =>
   text.length > limit ? `${text.slice(0, limit)}...` : text;
 
 const tableHeaders = [
-  { label: "#", key: "sessionNumber", flex: 0.5, minWidth: 50 },
-  { label: "Started", key: "startDateTime", flex: 2, minWidth: 160 },
-  { label: "Ended", key: "endDateTime", flex: 2, minWidth: 160 },
-  { label: "Duration", key: "duration", flex: 1, minWidth: 90 },
-  { label: "Notes", key: "experience", flex: 2.5, minWidth: 150 },
+  { label: "#", key: "sessionNumber", flex: 0.3, minWidth: 30 },
+  { label: "Started", key: "startDateTime", flex: 1, minWidth: 75 },
+  { label: "Ended", key: "endDateTime", flex: 1, minWidth: 75 },
+  { label: "Duration", key: "duration", flex: 0.7, minWidth: 55 },
+  { label: "Notes", key: "experience", flex: 1.3, minWidth: 70 },
+  { label: "Tag", key: "tag", flex: 0.7, minWidth: 60 },
 ] as const;
 
 export interface SessionsTableProps {
@@ -60,7 +62,7 @@ export const SessionsTable: FC<SessionsTableProps> = ({
     Animated.timing(mountAnimation, {
       toValue: 1,
       duration: 300,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [rows, mountAnimation]);
 
@@ -122,8 +124,13 @@ export const SessionsTable: FC<SessionsTableProps> = ({
                     style={[styles.cell, { flex: tableHeaders[4].flex, minWidth: tableHeaders[4].minWidth }]}
                     numberOfLines={2}
                   >
-                    {truncateText(session.experience, 70)}
+                    {truncateText(session.experience, 50)}
                   </Text>
+                  <View
+                    style={[styles.cell, styles.tagCell, { flex: tableHeaders[5].flex, minWidth: tableHeaders[5].minWidth }]}
+                  >
+                    <TagChip tag={session.tag} />
+                  </View>
                 </Pressable>
               </Animated.View>
             );
@@ -134,39 +141,50 @@ export const SessionsTable: FC<SessionsTableProps> = ({
   );
 };
 
+const TagChip: FC<{ tag: string | null }> = ({ tag }) => {
+  const label = resolveTagLabel(tag);
+  if (!label) {
+    return <Text style={styles.tagFallback}>-</Text>;
+  }
+  const backgroundColor = resolveTagColor(tag);
+  return (
+    <View style={[styles.tagChip, { backgroundColor }]}
+    >
+      <Text style={styles.tagChipLabel}>{label}</Text>
+    </View>
+  );
+};
+
 const styles = StyleSheet.create({
   tableContainer: {
-    minWidth: 650,
+    minWidth: 380,
     borderRadius: radii.lg,
     overflow: "hidden",
     borderWidth: 0,
     backgroundColor: colors.surface,
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.08)',
     elevation: 3,
     flex: 1,
   },
   headerRow: {
     flexDirection: "row",
     backgroundColor: colors.primary,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
   },
   headerCell: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 9,
+    lineHeight: 12,
     fontWeight: "700",
     color: colors.surface,
-    letterSpacing: 1.2,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xs,
     flexShrink: 1,
   },
   row: {
     flexDirection: "row",
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     alignItems: "center",
     backgroundColor: colors.surface,
@@ -181,15 +199,34 @@ const styles = StyleSheet.create({
     opacity: 0.9,
   },
   cell: {
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 11,
+    lineHeight: 16,
     fontWeight: "500",
     color: colors.textPrimary,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xs,
     flexShrink: 1,
   },
   centerCell: {
     textAlign: "center",
+  },
+  tagCell: {
+    justifyContent: "flex-start",
+  },
+  tagChip: {
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  tagChipLabel: {
+    ...typography.caption,
+    fontWeight: "600",
+    color: colors.surface,
+    letterSpacing: 0.4,
+    textTransform: "capitalize",
+  },
+  tagFallback: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   emptyState: {
     padding: spacing.lg,

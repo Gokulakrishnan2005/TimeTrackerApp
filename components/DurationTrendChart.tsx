@@ -1,13 +1,6 @@
 import { FC, useMemo } from "react";
-import { Dimensions, Platform, StyleSheet, Text, View } from "react-native";
+import { Dimensions, StyleSheet, Text, View } from "react-native";
 import { LineChart } from "react-native-chart-kit";
-import {
-  VictoryAxis,
-  VictoryChart,
-  VictoryLine,
-  VictoryScatter,
-  VictoryTheme,
-} from "victory";
 import { colors } from "../constants/colors";
 import { radii, spacing, typography } from "../constants/theme";
 import { Session } from "../services/session";
@@ -37,106 +30,45 @@ export const DurationTrendChart: FC<DurationTrendChartProps> = ({ sessions }) =>
     );
   }
 
-  // Use react-native-chart-kit for mobile
-  if (Platform.OS !== 'web') {
-    const screenWidth = Dimensions.get('window').width - spacing.xl * 6;
-    const labels = chartData.map(d => `S${d.sessionNumber}`);
-    const dataPoints = chartData.map(d => d.durationHours);
-
-    return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Progress Trend</Text>
-        <LineChart
-          data={{
-            labels: labels,
-            datasets: [{ data: dataPoints }],
-          }}
-          width={Math.max(screenWidth, 280)}
-          height={200}
-          chartConfig={{
-            backgroundColor: colors.surface,
-            backgroundGradientFrom: colors.surface,
-            backgroundGradientTo: colors.surface,
-            decimalPlaces: 1,
-            color: (opacity = 1) => `rgba(99, 102, 241, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(107, 114, 128, ${opacity})`,
-            style: {
-              borderRadius: 16,
-            },
-            propsForDots: {
-              r: '7',
-              strokeWidth: '3',
-              stroke: colors.primary,
-              fill: colors.surface,
-            },
-          }}
-          bezier
-          style={{
-            marginVertical: spacing.sm,
-            borderRadius: 16,
-          }}
-        />
-      </View>
-    );
-  }
+  // Mobile-first approach using react-native-chart-kit
+  const screenWidth = Dimensions.get('window').width;
+  const chartWidth = Math.min(screenWidth - (spacing.xl * 2), 360);
+  const labels = chartData.map(d => `S${d.sessionNumber}`);
+  const dataPoints = chartData.map(d => d.durationHours);
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Progress Trend</Text>
-      <VictoryChart
-        theme={VictoryTheme.material}
-        height={260}
-        padding={{ top: 40, bottom: 60, left: 60, right: 40 }}
-      >
-        <VictoryAxis
-          tickFormat={(tick: number) => `S${tick}`}
-          style={{
-            axis: { stroke: "transparent" },
-            ticks: { stroke: "transparent" },
-            tickLabels: {
-              ...typography.caption,
-              fill: colors.textSecondary,
-              angle: -25,
-              padding: 18,
-            },
-          }}
-        />
-        <VictoryAxis
-          dependentAxis
-          tickFormat={(tick: number) => `${tick}h`}
-          style={{
-            axis: { stroke: "transparent" },
-            grid: { stroke: "rgba(59, 89, 152, 0.15)", strokeDasharray: "4 4" },
-            tickLabels: {
-              ...typography.caption,
-              fill: colors.textSecondary,
-            },
-          }}
-        />
-        <VictoryLine
-          data={chartData}
-          x="sessionNumber"
-          y="durationHours"
-          style={{
-            data: {
-              stroke: colors.primary,
-              strokeWidth: 3,
-            },
-          }}
-          animate={{ duration: 600, easing: "quadInOut" }}
-          interpolation="monotoneX"
-        />
-        <VictoryScatter
-          data={chartData}
-          x="sessionNumber"
-          y="durationHours"
-          size={5}
-          style={{
-            data: { fill: colors.surface, stroke: colors.primary, strokeWidth: 2 },
-          }}
-          animate={{ duration: 500, easing: "quadInOut" }}
-        />
-      </VictoryChart>
+      <LineChart
+        data={{
+          labels: labels,
+          datasets: [{ data: dataPoints }],
+        }}
+        width={chartWidth}
+        height={220}
+        chartConfig={{
+          backgroundColor: colors.surface,
+          backgroundGradientFrom: colors.surface,
+          backgroundGradientTo: colors.surface,
+          decimalPlaces: 1,
+          color: (opacity = 1) => `rgba(71, 85, 105, ${opacity})`, // Slate-600 for professional look
+          labelColor: (opacity = 1) => colors.textSecondary,
+          style: {
+            borderRadius: radii.lg,
+          },
+          propsForDots: {
+            r: '6',
+            strokeWidth: '2',
+            stroke: colors.primary,
+            fill: colors.surface,
+          },
+        }}
+        bezier
+        style={{
+          marginVertical: spacing.sm,
+          borderRadius: radii.lg,
+        }}
+      />
     </View>
   );
 };
@@ -150,10 +82,7 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     alignSelf: "stretch",
     width: "100%",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.08)',
     elevation: 3,
     overflow: "hidden",
     alignItems: "center",

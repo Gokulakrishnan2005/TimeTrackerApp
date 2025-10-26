@@ -7,10 +7,13 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  Alert,
+  Pressable,
 } from "react-native";
 import { colors } from "../constants/colors";
 import { spacing, typography, radii } from "../constants/theme";
 import financeService, { Transaction } from "../services/financeService";
+import AddTransactionModal from "../components/AddTransactionModal";
 
 type FilterType = "all" | "income" | "expense";
 
@@ -21,6 +24,8 @@ const SpendingHistoryScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [error, setError] = useState<string | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
   const totals = useMemo(() => {
     const income = visibleTransactions
@@ -78,6 +83,51 @@ const SpendingHistoryScreen: React.FC = () => {
     loadTransactions();
   };
 
+  const handleEdit = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setShowEditModal(true);
+  };
+
+  const handleDelete = (transaction: Transaction) => {
+    Alert.alert(
+      "Delete Transaction",
+      `Are you sure you want to delete this ${transaction.type} transaction of ${financeService.formatCurrency(transaction.amount)}?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await financeService.deleteTransaction(transaction.id);
+              loadTransactions();
+            } catch (err) {
+              Alert.alert("Error", "Failed to delete transaction");
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSaveEdit = async (data: any) => {
+    try {
+      if (editingTransaction) {
+        await financeService.updateTransaction(editingTransaction.id, {
+          amount: data.amount,
+          category: data.customCategory || data.category,
+          notes: data.notes,
+          date: data.date,
+        });
+        setShowEditModal(false);
+        setEditingTransaction(null);
+        loadTransactions();
+      }
+    } catch (err) {
+      Alert.alert("Error", "Failed to update transaction");
+    }
+  };
+
   const renderItem = ({ item }: { item: Transaction }) => {
     const amountColor = item.type === "income" ? "#059669" : "#DC2626";
     const amountPrefix = item.type === "income" ? "+" : "-";
@@ -89,15 +139,31 @@ const SpendingHistoryScreen: React.FC = () => {
 
     return (
       <View style={styles.transactionItem}>
-        <View style={styles.transactionRow}>
-          <Text style={styles.transactionCategory}>{item.category}</Text>
-          <Text style={[styles.transactionAmount, { color: amountColor }]}>
-            {amountPrefix}
-            {financeService.formatCurrency(item.amount).replace("₹", "")}
-          </Text>
+        <View style={styles.transactionContent}>
+          <View style={styles.transactionRow}>
+            <Text style={styles.transactionCategory}>{item.category}</Text>
+            <Text style={[styles.transactionAmount, { color: amountColor }]}>
+              {amountPrefix}
+              {financeService.formatCurrency(item.amount).replace("₹", "")}
+            </Text>
+          </View>
+          {!!item.notes && <Text style={styles.transactionNotes}>{item.notes}</Text>}
+          <Text style={styles.transactionMeta}>{formattedDate}</Text>
         </View>
-        {!!item.notes && <Text style={styles.transactionNotes}>{item.notes}</Text>}
-        <Text style={styles.transactionMeta}>{formattedDate}</Text>
+        <View style={styles.transactionActions}>
+          <Pressable
+            style={[styles.actionButton, styles.editButton]}
+            onPress={() => handleEdit(item)}
+          >
+            <Text style={styles.actionButtonText}>Edit</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.actionButton, styles.deleteButton]}
+            onPress={() => handleDelete(item)}
+          >
+            <Text style={styles.actionButtonText}>Delete</Text>
+          </Pressable>
+        </View>
       </View>
     );
   };
@@ -168,6 +234,19 @@ const SpendingHistoryScreen: React.FC = () => {
         renderItem={renderItem}
         ListEmptyComponent={renderEmpty}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} />}
+      />
+
+      <AddTransactionModal
+        visible={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingTransaction(null);
+        }}
+        onTransactionAdded={() => {
+          setShowEditModal(false);
+          setEditingTransaction(null);
+          loadTransactions();
+        }}
       />
     </View>
   );
@@ -252,12 +331,39 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: spacing.lg,
+    gap: spacing.md,
+  },
+  transactionContent: {
     gap: spacing.xs,
   },
   transactionRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+  },
+  transactionActions: {
+    flexDirection: "row",
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  actionButton: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radii.md,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  editButton: {
+    backgroundColor: colors.info,
+  },
+  deleteButton: {
+    backgroundColor: colors.danger,
+  },
+  actionButtonText: {
+    ...typography.caption,
+    color: colors.surface,
+    fontWeight: "600",
   },
   transactionCategory: {
     ...typography.body,

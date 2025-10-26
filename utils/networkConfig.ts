@@ -108,26 +108,11 @@ export const getNetworkConfig = () => {
 
 /**
  * Utility function to test connectivity with timeout
+ * DISABLED to prevent network errors during development
  */
 export const testConnectivity = async (url?: string): Promise<boolean> => {
-  try {
-    const testUrl = url || `${getNetworkConfig().apiBaseUrl.replace('/api', '')}/health`;
-
-    // Create AbortController for timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000);
-
-    const response = await fetch(testUrl, {
-      method: 'GET',
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-    return response.ok;
-  } catch (error) {
-    console.warn('Connectivity test failed:', error);
-    return false;
-  }
+  console.log('Connectivity test disabled - skipping network checks');
+  return false; // Always return false to disable backend connections
 };
 
 /**

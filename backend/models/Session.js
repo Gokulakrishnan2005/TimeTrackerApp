@@ -76,6 +76,14 @@ const sessionSchema = new mongoose.Schema({
     trim: true
   },
 
+  // Optional tag describing the session focus (e.g., Work, Study, etc.)
+  tag: {
+    type: String,
+    default: null,
+    trim: true,
+    maxlength: [50, 'Tag cannot exceed 50 characters']
+  },
+
   // Session status - active or completed
   status: {
     type: String,
@@ -176,9 +184,16 @@ sessionSchema.statics.getTotalDuration = function(userId) {
  * @param {string} experience - User's reflection notes
  * @returns {Promise<Session>} Updated session document
  */
-sessionSchema.methods.completeSession = function(experience) {
+sessionSchema.methods.completeSession = function(experience, tag) {
   this.endDateTime = new Date();
   this.experience = experience || '';
+  if (tag !== undefined) {
+    if (typeof tag === 'string' && tag.trim().length > 0) {
+      this.tag = tag.trim().slice(0, 50);
+    } else {
+      this.tag = null;
+    }
+  }
   this.status = 'completed';
 
   // Duration will be calculated in pre-save middleware
@@ -220,6 +235,7 @@ sessionSchema.virtual('summary').get(function() {
     duration: this.duration,
     formattedDuration: this.getFormattedDuration(),
     experience: this.experience,
+    tag: this.tag,
     status: this.status,
     createdAt: this.createdAt,
     updatedAt: this.updatedAt

@@ -15,16 +15,33 @@ const getCacheDirectory = (): string | null =>
   ((FileSystem as any).cacheDirectory as string | null | undefined) ?? null;
 
 const resolveWritableDirectory = (): { base: string; source: "document" | "cache" } => {
-  const documentDir = getDocumentDirectory();
-  if (documentDir) {
-    return { base: documentDir, source: "document" };
+  try {
+    const documentDir = getDocumentDirectory();
+    if (documentDir) {
+      return { base: documentDir, source: "document" };
+    }
+  } catch (err) {
+    console.warn('Document directory not available:', err);
   }
-  const cacheDir = getCacheDirectory();
-  if (cacheDir) {
-    return { base: cacheDir, source: "cache" };
+  
+  try {
+    const cacheDir = getCacheDirectory();
+    if (cacheDir) {
+      return { base: cacheDir, source: "cache" };
+    }
+  } catch (err) {
+    console.warn('Cache directory not available:', err);
   }
+  
+  // Last resort: use a relative path that works in most environments
+  if (Platform.OS === 'web') {
+    throw new Error(
+      "Export/Import is not available on web. Please use the mobile app."
+    );
+  }
+  
   throw new Error(
-    "Storage unavailable. Please ensure the app has permission to access local storage, then try again."
+    "Storage unavailable. Please grant storage permissions in your device settings and restart the app."
   );
 };
 

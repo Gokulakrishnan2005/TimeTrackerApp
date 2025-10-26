@@ -28,6 +28,8 @@ import { ExperienceModal } from "../components/ExperienceModal";
 import { SessionsTable } from "../components/SessionsTable";
 import { ExperienceDetailModal } from "../components/ExperienceDetailModal";
 import { DurationTrendChart } from "../components/DurationTrendChart";
+import { CompactTagDistribution } from "../components/CompactTagDistribution";
+import { TagSelectionModal, TagModalMode } from "../components/TagSelectionModal";
 
 const INITIAL_TIMER = "0 MINUTES";
 const AnimatedView = Animated.createAnimatedComponent(View);
@@ -58,6 +60,9 @@ export const HomeScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isTagModalVisible, setTagModalVisible] = useState(false);
+  const [tagModalMode, setTagModalMode] = useState<TagModalMode>("start");
+  const [pendingTag, setPendingTag] = useState<string | null>(null);
 
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const stateAnim = useRef(new Animated.Value(0)).current;
@@ -150,7 +155,7 @@ export const HomeScreen = () => {
   useEffect(() => {
     Animated.spring(scaleAnim, {
       toValue: isActive ? 1.05 : 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
       stiffness: 200,
       damping: 20,
     }).start();
@@ -187,11 +192,11 @@ export const HomeScreen = () => {
     [stateAnim]
   );
 
-  const handleStart = useCallback(async () => {
+  const executeStart = useCallback(async (tag: string | null) => {
     try {
       setIsProcessing(true);
       setErrorMessage(null);
-      const session = await startNewSession();
+      const session = await startNewSession(tag ?? undefined);
       setActiveSession(session);
       await refreshState({ silent: true });
     } catch (error: unknown) {
@@ -201,13 +206,38 @@ export const HomeScreen = () => {
     }
   }, [handleError, refreshState]);
 
+  const handleStartRequest = useCallback(() => {
+    if (isProcessing) {
+      return;
+    }
+    setPendingTag(null);
+    setTagModalMode("start");
+    setTagModalVisible(true);
+  }, [isProcessing]);
+
   const handleStop = useCallback(() => {
     if (!activeSession) {
       return;
     }
-
     setExperienceModalVisible(true);
   }, [activeSession]);
+
+  const handleTagSkip = useCallback(() => {
+    setTagModalVisible(false);
+    if (tagModalMode === "start") {
+      executeStart(null);
+    }
+  }, [executeStart, tagModalMode]);
+
+  const handleTagConfirm = useCallback((tag: string | null) => {
+    setTagModalVisible(false);
+    if (tagModalMode === "start") {
+      executeStart(tag);
+    } else {
+      setPendingTag(tag);
+      setExperienceModalVisible(true);
+    }
+  }, [executeStart, tagModalMode]);
 
   const handlePress = useCallback(() => {
     if (isProcessing) {
@@ -215,11 +245,17 @@ export const HomeScreen = () => {
     }
 
     if (isActive) {
-      handleStop();
+      if (!activeSession?.tag) {
+        setTagModalMode("stop");
+        setPendingTag(null);
+        setTagModalVisible(true);
+      } else {
+        handleStop();
+      }
     } else {
-      handleStart();
+        handleStartRequest();
     }
-  }, [handleStart, handleStop, isActive, isProcessing]);
+  }, [activeSession?.tag, handleStop, handleStartRequest, isActive, isProcessing]);
 
   const handleRowPress = useCallback((session: Session) => {
     setSelectedSessionForDetail(session);
@@ -280,23 +316,18 @@ export const HomeScreen = () => {
       setIsSavingExperience(true);
       setErrorMessage(null);
       const trimmedExperience = experienceText.trim();
-      await stopSession(activeSession.id, trimmedExperience);
+      await stopSession(activeSession.id, trimmedExperience, pendingTag ?? activeSession.tag ?? undefined);
       await refreshState({ silent: true });
       setExperienceModalVisible(false);
       setExperienceText("");
+      setPendingTag(null);
       setTimerLabel(INITIAL_TIMER);
     } catch (error: unknown) {
       handleError(error, "Unable to stop the current session.");
     } finally {
       setIsSavingExperience(false);
     }
-  }, [
-    activeSession,
-    experienceText,
-    isSavingExperience,
-    handleError,
-    refreshState,
-  ]);
+  }, [activeSession, experienceText, isSavingExperience, handleError, refreshState, pendingTag]);
 
   if (isLoading) {
     return (
@@ -360,6 +391,8 @@ export const HomeScreen = () => {
           </Pressable>
 
           <Text style={styles.timerLabel}>{timerLabel}</Text>
+          
+          <CompactTagDistribution onError={(msg) => setErrorMessage(msg)} />
         </View>
 
         <View style={styles.bottomSection}>
@@ -391,6 +424,15 @@ export const HomeScreen = () => {
           onCancel={handleExperienceCancel}
           onSave={handleExperienceSave}
           isSaving={isSavingExperience}
+        />
+
+        <TagSelectionModal
+          visible={isTagModalVisible}
+          mode={tagModalMode}
+          initialTag={tagModalMode === "stop" ? activeSession?.tag ?? null : null}
+          onConfirm={handleTagConfirm}
+          onSkip={handleTagSkip}
+          onClose={() => setTagModalVisible(false)}
         />
 
         <ExperienceDetailModal
@@ -483,10 +525,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.xl,
     alignSelf: "stretch",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.08)',
     elevation: 3,
   },
   instruction: {
@@ -504,10 +543,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     minHeight: 64,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 16,
+    boxShadow: `0px 6px 16px ${colors.primary}35`,
     elevation: 8,
   },
   actionButtonInner: {
@@ -540,10 +576,7 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
     gap: spacing.xl,
     alignSelf: "stretch",
-    shadowColor: "#000",
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: '0px 4px 12px rgba(0, 0, 0, 0.08)',
     elevation: 3,
   },
   bottomTitle: {
@@ -570,10 +603,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     borderRadius: radii.lg,
     backgroundColor: colors.primary,
-    shadowColor: colors.primary,
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
+    boxShadow: `0px 4px 12px ${colors.primary}25`,
     elevation: 4,
   },
   summaryLabel: {
