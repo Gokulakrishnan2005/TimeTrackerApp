@@ -88,7 +88,7 @@ export const HomeScreen = () => {
   useEffect(() => {
     const archiveTasks = async () => {
       try {
-        await taskService.archiveAllUnfinishedItems();
+        await taskService.archiveAllAccomplishedItems();
       } catch (error) {
         handleError(error, "Failed to archive tasks.");
       }
