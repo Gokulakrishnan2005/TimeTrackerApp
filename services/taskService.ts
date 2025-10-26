@@ -625,7 +625,7 @@ class TaskService {
       const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
       await storeData('goals', remaining);
 
-      return unfinished.length;
+      return accomplished.length;
     } catch (error) {
       console.error('Error archiving unfinished weekly goals:', error);
       console.log('Weekly goals archiving failed - this might be due to invalid data format or date issues');
@@ -669,7 +669,7 @@ class TaskService {
       const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
       await storeData('goals', remaining);
 
-      return unfinished.length;
+      return accomplished.length;
     } catch (error) {
       console.error('Error archiving monthly goals:', error);
       return 0;
@@ -717,10 +717,9 @@ class TaskService {
       const remaining = goals.filter((g: Goal) => !accomplished.find((a: Goal) => a.id === g.id));
       await storeData('goals', remaining);
 
-      return unfinished.length;
+      return accomplished.length;
     } catch (error) {
-      console.error('Error archiving unfinished yearly goals:', error);
-      console.log('Yearly goals archiving failed - this might be due to invalid data format or date issues');
+      console.error('Error archiving yearly goals:', error);
       return 0;
     }
   }

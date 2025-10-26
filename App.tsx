@@ -138,7 +138,6 @@ export default function App() {
       }
       */
 
-      await taskService.carryOverTasks();
       const hasData = await getData('initialized');
       if (!hasData) {
         await storeData('timeEntries', [
